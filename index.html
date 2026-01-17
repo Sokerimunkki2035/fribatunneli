@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Fribatunneli – heiton karkea seuranta (demo)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f14; color:#e9eef5; }
+    header { padding: 12px 14px; border-bottom: 1px solid #223; background:#0f1722; }
+    h1 { font-size: 16px; margin: 0; }
+    .wrap { padding: 12px 14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button, select, input[type="range"] {
+      background:#172235; color:#e9eef5; border:1px solid #2a3a55; border-radius:10px;
+      padding:10px 12px; font-size:14px;
+    }
+    button:disabled { opacity: .5; }
+    .card { background:#0f1722; border:1px solid #223; border-radius:14px; padding: 12px; margin-top: 12px; }
+    .stage { position: relative; width: 100%; max-width: 760px; margin: 12px auto; }
+    video, canvas { width: 100%; border-radius: 14px; border:1px solid #223; display:block; }
+    #overlay { position:absolute; left:0; top:0; }
+    .small { font-size: 12px; opacity: .85; }
+    .kv { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .kv div { background:#0b1220; border:1px solid #223; border-radius:12px; padding:10px; }
+    .label { font-size: 12px; opacity:.8; }
+    .value { font-size: 16px; font-weight: 650; margin-top: 2px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Fribatunneli – heiton karkea seuranta (demo)</h1>
+</header>
+
+<div class="wrap">
+  <div class="row">
+    <button id="btnStartCam">1) Käynnistä kamera</button>
+    <button id="btnStartTrack" disabled>2) Aloita seuranta</button>
+    <button id="btnStop" disabled>Lopeta</button>
+    <button id="btnClear" disabled>Tyhjennä rata</button>
+
+    <select id="cameraSelect" title="Kamera">
+      <option value="environment">Takakamera</option>
+      <option value="user">Etukamera</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex:1; min-width:240px;">
+        <div class="label">Herkkyys (liike-ero, pienempi = herkempi)</div>
+        <input id="threshold" type="range" min="8" max="60" value="22" />
+        <div class="small">Nykyinen: <span id="thresholdVal">22</span></div>
+      </div>
+
+      <div style="flex:1; min-width:240px;">
+        <div class="label">Minimialue (liikkuvan kohteen koko)</div>
+        <input id="minArea" type="range" min="50" max="2000" value="350" />
+        <div class="small">Nykyinen: <span id="minAreaVal">350</span></div>
+      </div>
+
+      <div style="flex:1; min-width:240px;">
+        <div class="label">Lukitus heiton jälkeen (ms)</div>
+        <input id="lockMs" type="range" min="0" max="1500" value="350" />
+        <div class="small">Nykyinen: <span id="lockMsVal">350</span></div>
+      </div>
+    </div>
+
+    <p class="small" style="margin:10px 0 0">
+      Vinkki: kuvaa niin, että heitto/portti on keskellä ja tausta on mahdollisimman rauhallinen.
+      Tämä demo ei “tunnista kiekkoa AI:lla”, vaan seuraa suurinta selkeää liikettä rajatulla alueella.
+    </p>
+  </div>
+
+  <div class="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="kv">
+      <div>
+        <div class="label">Suunta</div>
+        <div class="value" id="dirOut">–</div>
+        <div class="small" id="dirDbg">–</div>
+      </div>
+      <div>
+        <div class="label">Korkeus</div>
+        <div class="value" id="heightOut">–</div>
+        <div class="small" id="heightDbg">–</div>
+      </div>
+      <div>
+        <div class="label">Seurannan tila</div>
+        <div class="value" id="stateOut">Ei käynnissä</div>
+        <div class="small" id="stateDbg">–</div>
+      </div>
+      <div>
+        <div class="label">Radan pisteet</div>
+        <div class="value" id="ptsOut">0</div>
+        <div class="small">Piirtää vain kun kohde löytyy ROI-alueelta.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const ctx = overlay.getContext('2d');
+
+  const btnStartCam = document.getElementById('btnStartCam');
+  const btnStartTrack = document.getElementById('btnStartTrack');
+  const btnStop = document.getElementById('btnStop');
+  const btnClear = document.getElementById('btnClear');
+  const cameraSelect = document.getElementById('cameraSelect');
+
+  const thresholdEl = document.getElementById('threshold');
+  const minAreaEl = document.getElementById('minArea');
+  const lockMsEl = document.getElementById('lockMs');
+  const thresholdVal = document.getElementById('thresholdVal');
+  const minAreaVal = document.getElementById('minAreaVal');
+  const lockMsVal = document.getElementById('lockMsVal');
+
+  const dirOut = document.getElementById('dirOut');
+  const heightOut = document.getElementById('heightOut');
+  const stateOut = document.getElementById('stateOut');
+  const ptsOut = document.getElementById('ptsOut');
+
+  const dirDbg = document.getElementById('dirDbg');
+  const heightDbg = document.getElementById('heightDbg');
+  const stateDbg = document.getElementById('stateDbg');
+
+  thresholdEl.addEventListener('input', () => thresholdVal.textContent = thresholdEl.value);
+  minAreaEl.addEventListener('input', () => minAreaVal.textContent = minAreaEl.value);
+  lockMsEl.addEventListener('input', () => lockMsVal.textContent = lockMsEl.value);
+
+  let stream = null;
+  let rafId = null;
+
+  // Hidden canvases for processing (small for speed)
+  const procCanvas = document.createElement('canvas');
+  const pctx = procCanvas.getContext('2d', { willReadFrequently: true });
+
+  let lastFrame = null;
+  let tracking = false;
+
+  // Track points
+  const trail = [];
+  let lastFoundAt = 0;
+  let lockedUntil = 0;
+
+  // For classification
+  let firstPt = null;
+  let lastPt = null;
+  let minY = Infinity, maxY = -Infinity;
+
+  function setState(main, dbg = '') {
+    stateOut.textContent = main;
+    stateDbg.textContent = dbg || '–';
+  }
+
+  function clearTrail() {
+    trail.length = 0;
+    firstPt = null;
+    lastPt = null;
+    minY = Infinity; maxY = -Infinity;
+    ptsOut.textContent = '0';
+  }
+
+  function drawOverlay(foundBox=null, roi=null) {
+    const w = overlay.width, h = overlay.height;
+    ctx.clearRect(0,0,w,h);
+
+    // ROI rectangle
+    if (roi) {
+      ctx.strokeStyle = 'rgba(0,200,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(roi.x, roi.y, roi.w, roi.h);
+      ctx.fillStyle = 'rgba(0,200,255,0.08)';
+      ctx.fillRect(roi.x, roi.y, roi.w, roi.h);
+    }
+
+    // Trail
+    if (trail.length > 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for (let i=1;i<trail.length;i++) ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+
+      // Last point marker
+      const lp = trail[trail.length-1];
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath();
+      ctx.arc(lp.x, lp.y, 6, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // Found box
+    if (foundBox) {
+      ctx.strokeStyle = 'rgba(0,255,120,0.95)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(foundBox.x, foundBox.y, foundBox.w, foundBox.h);
+    }
+  }
+
+  function classify() {
+    if (!firstPt || !lastPt) return;
+
+    const dx = lastPt.x - firstPt.x;
+    const dy = lastPt.y - firstPt.y;
+
+    // Direction: compare dx to width
+    const w = overlay.width;
+    const dxNorm = dx / Math.max(1, w);
+
+    let dir = 'Suora';
+    if (dxNorm > 0.08) dir = 'Oikealle';
+    else if (dxNorm < -0.08) dir = 'Vasemmalle';
+
+    // Height: use range of Y movement in ROI
+    const h = overlay.height;
+    const ySpan = (maxY - minY) / Math.max(1, h);
+
+    let ht = 'Keskikorkea';
+    if (ySpan < 0.08) ht = 'Tasainen';
+    else {
+      // If trajectory overall went up (negative dy), call "korkea"
+      const dyNorm = dy / Math.max(1, h);
+      if (dyNorm < -0.05) ht = 'Korkea';
+      else if (dyNorm > 0.05) ht = 'Matala';
+      else ht = 'Keskikorkea';
+    }
+
+    dirOut.textContent = dir;
+    heightOut.textContent = ht;
+
+    dirDbg.textContent = `dx=${dx.toFixed(0)} px (norm ${(dxNorm*100).toFixed(1)}%)`;
+    heightDbg.textContent = `ySpan=${(ySpan*100).toFixed(1)}% , dy=${dy.toFixed(0)} px`;
+  }
+
+  async function startCamera() {
+    stopAll();
+
+    const facingMode = cameraSelect.value;
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode,
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+
+      // Match overlay canvas to video displayed size after metadata
+      resizeCanvases();
+
+      btnStartTrack.disabled = false;
+      btnStop.disabled = false;
+      btnClear.disabled = false;
+
+      setState('Kamera käynnissä', 'Paina “Aloita seuranta” ja heitä portilta.');
+    } catch (e) {
+      setState('Kamera ei käynnisty', String(e));
+      alert('Kameran käynnistys epäonnistui. Varmista, että sivu on HTTPS (GitHub Pages) ja selaimella on kameran lupa.');
+    }
+  }
+
+  function resizeCanvases() {
+    // Use actual rendered size for overlay drawing
+    const rect = video.getBoundingClientRect();
+    overlay.width = Math.round(rect.width);
+    overlay.height = Math.round(rect.height);
+
+    // Processing canvas: smaller for speed
+    procCanvas.width = 320;
+    procCanvas.height = 180;
+    lastFrame = null;
+    drawOverlay(null, getROI());
+  }
+
+  window.addEventListener('resize', () => {
+    if (stream) resizeCanvases();
+  });
+
+  function getROI() {
+    // ROI in overlay coordinates (center box)
+    const w = overlay.width, h = overlay.height;
+    const roiW = Math.round(w * 0.55);
+    const roiH = Math.round(h * 0.55);
+    return {
+      x: Math.round((w - roiW) / 2),
+      y: Math.round((h - roiH) / 2),
+      w: roiW,
+      h: roiH
+    };
+  }
+
+  function stopAll() {
+    tracking = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    video.srcObject = null;
+
+    setState('Ei käynnissä');
+    btnStartTrack.disabled = true;
+    btnStop.disabled = true;
+    btnClear.disabled = true;
+  }
+
+  function stopTrackingOnly() {
+    tracking = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    setState('Kamera käynnissä', 'Seuranta pysäytetty.');
+  }
+
+  function processFrame() {
+    if (!tracking) return;
+
+    const now = performance.now();
+
+    // Draw video frame into small processing canvas
+    // Note: mapping happens in small canvas; ROI is applied in overlay space by proportion.
+    pctx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+
+    const frame = pctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+    const data = frame.data;
+
+    const thr = parseInt(thresholdEl.value, 10);
+    const minArea = parseInt(minAreaEl.value, 10);
+
+    // If no last frame, just store and continue
+    if (!lastFrame) {
+      lastFrame = new Uint8ClampedArray(data);
+      drawOverlay(null, getROI());
+      rafId = requestAnimationFrame(processFrame);
+      return;
+    }
+
+    // Compute difference mask (simple)
+    // We'll track bounding box of pixels above threshold
+    let minX = procCanvas.width, minYp = procCanvas.height, maxX = 0, maxYp = 0;
+    let count = 0;
+
+    // Apply ROI in processing space too (center region)
+    const roi = getROI();
+    const sx = procCanvas.width / overlay.width;
+    const sy = procCanvas.height / overlay.height;
+    const rpx = Math.round(roi.x * sx);
+    const rpy = Math.round(roi.y * sy);
+    const rpw = Math.round(roi.w * sx);
+    const rph = Math.round(roi.h * sy);
+
+    const startX = Math.max(0, rpx);
+    const startY = Math.max(0, rpy);
+    const endX = Math.min(procCanvas.width, rpx + rpw);
+    const endY = Math.min(procCanvas.height, rpy + rph);
+
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const i = (y * procCanvas.width + x) * 4;
+
+        // grayscale current and previous
+        const g = (data[i] + data[i+1] + data[i+2]) / 3;
+        const pg = (lastFrame[i] + lastFrame[i+1] + lastFrame[i+2]) / 3;
+
+        const diff = Math.abs(g - pg);
+        if (diff > thr) {
+          count++;
+          if (x < minX) minX = x;
+          if (y < minYp) minYp = y;
+          if (x > maxX) maxX = x;
+          if (y > maxYp) maxYp = y;
+        }
+      }
+    }
+
+    // Update last frame buffer
+    lastFrame.set(data);
+
+    let foundBox = null;
+
+    // Locking to avoid continuous tracking noise after a hit
+    if (now < lockedUntil) {
+      drawOverlay(null, roi);
+      rafId = requestAnimationFrame(processFrame);
+      return;
+    }
+
+    // If enough motion pixels, accept
+    if (count >= minArea) {
+      // Convert found box to overlay coordinates
+      const bx = Math.round(minX / sx);
+      const by = Math.round(minYp / sy);
+      const bw = Math.round((maxX - minX) / sx);
+      const bh = Math.round((maxYp - minYp) / sy);
+
+      // Center point
+      const cx = bx + Math.round(bw / 2);
+      const cy = by + Math.round(bh / 2);
+
+      // Ensure within ROI in overlay space
+      if (cx >= roi.x && cx <= roi.x + roi.w && cy >= roi.y && cy <= roi.y + roi.h) {
+        foundBox = { x: bx, y: by, w: bw, h: bh };
+
+        // Add point
+        const pt = { x: cx, y: cy, t: now };
+        trail.push(pt);
+        if (!firstPt) firstPt = pt;
+        lastPt = pt;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        // Keep trail length reasonable
+        if (trail.length > 80) trail.shift();
+
+        ptsOut.textContent = String(trail.length);
+
+        lastFoundAt = now;
+
+        // If we just found a strong motion, optionally lock briefly
+        const lock = parseInt(lockMsEl.value, 10);
+        if (lock > 0) lockedUntil = now + lock;
+      }
+    }
+
+    // Draw overlay and classify
+    drawOverlay(foundBox, roi);
+
+    // If no points added for a while, finalize classification
+    if (trail.length > 5 && (now - lastFoundAt) > 450) {
+      classify();
+    }
+
+    dirDbg.textContent = `motionPixels=${count} thr=${thr} roi=${Math.round(roi.w)}x${Math.round(roi.h)}`;
+    heightDbg.textContent = heightDbg.textContent || '–';
+
+    rafId = requestAnimationFrame(processFrame);
+  }
+
+  function startTracking() {
+    if (!stream) return;
+    tracking = true;
+    clearTrail();
+    dirOut.textContent = '–';
+    heightOut.textContent = '–';
+    lockedUntil = 0;
+    lastFoundAt = 0;
+
+    setState('Seuranta käynnissä', 'Heitä portilta – pisteitä tulee kun liike löytyy ROI-alueelta.');
+    rafId = requestAnimationFrame(processFrame);
+  }
+
+  btnStartCam.addEventListener('click', startCamera);
+  btnStartTrack.addEventListener('click', () => {
+    btnStartTrack.disabled = true; // avoid double start
+    startTracking();
+    setTimeout(()=> btnStartTrack.disabled = false, 400);
+  });
+  btnStop.addEventListener('click', () => {
+    stopTrackingOnly();
+  });
+  btnClear.addEventListener('click', () => {
+    clearTrail();
+    drawOverlay(null, getROI());
+    dirOut.textContent = '–';
+    heightOut.textContent = '–';
+    dirDbg.textContent = '–';
+    heightDbg.textContent = '–';
+  });
+
+  // Basic feature checks
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setState('Selaimesi ei tue kamera-API:a', 'Käytä Chromea Androidilla tai varmista HTTPS.');
+    btnStartCam.disabled = true;
+  } else {
+    setState('Valmis', 'Paina “Käynnistä kamera”.');
+  }
+})();
+</script>
+</body>
+</html>
