@@ -9,20 +9,96 @@
     header { padding: 12px 14px; border-bottom: 1px solid #223; background:#0f1722; }
     h1 { font-size: 16px; margin: 0; }
     .wrap { padding: 12px 14px; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     button, select, input[type="range"] {
       background:#172235; color:#e9eef5; border:1px solid #2a3a55; border-radius:10px;
       padding:10px 12px; font-size:14px;
     }
     button:disabled { opacity: .5; }
     .card { background:#0f1722; border:1px solid #223; border-radius:14px; padding: 12px; margin-top: 12px; }
+    .small { font-size: 12px; opacity: .85; }
+
     .stage { position: relative; width: 100%; max-width: 760px; margin: 12px auto; }
     video, canvas { width: 100%; border-radius: 14px; border:1px solid #223; display:block; }
-    #overlay { position:absolute; left:0; top:0; }
-    .small { font-size: 12px; opacity: .85; }
-    .kv { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
-    .kv div { background:#0b1220; border:1px solid #223; border-radius:12px; padding:10px; }
-    .label { font-size: 12px; opacity:.8; }
+    #overlay { position:absolute; left:0; top:0; pointer-events:none; }
+
+    /* HUD buttons on top of camera */
+    .hud {
+      position: absolute;
+      left: 10px; right: 10px;
+      top: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      z-index: 5;
+    }
+
+    .hud button, .hud select {
+      background: rgba(23,34,53,0.92);
+      border: 1px solid rgba(42,58,85,0.95);
+      backdrop-filter: blur(6px);
+    }
+
+    .hud button {
+      padding: 12px 14px;
+      font-size: 15px;
+      border-radius: 14px;
+    }
+
+    .hud .grow { flex: 1 1 auto; min-width: 160px; }
+
+    .hud-bottom {
+      position: absolute;
+      left: 10px; right: 10px;
+      bottom: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 5;
+    }
+
+    .pill {
+      flex: 1 1 0;
+      background: rgba(15,23,34,0.78);
+      border: 1px solid rgba(34,35,51,0.9);
+      border-radius: 14px;
+      padding: 10px 12px;
+      backdrop-filter: blur(6px);
+      font-size: 13px;
+      min-width: 120px;
+    }
+    .pill b { display:block; font-size: 14px; margin-bottom: 4px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .controls .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    @media (min-width: 700px) {
+      .controls .row { grid-template-columns: 1fr 1fr; }
+    }
+
+    .control {
+      background:#0b1220;
+      border:1px solid #223;
+      border-radius:12px;
+      padding:10px;
+    }
+    .label { font-size: 12px; opacity:.85; margin-bottom: 8px; }
+
+    .kv {
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+      margin-top: 10px;
+    }
+    .kv > div { background:#0b1220; border:1px solid #223; border-radius:12px; padding:10px; }
     .value { font-size: 16px; font-weight: 650; margin-top: 2px; }
   </style>
 </head>
@@ -32,51 +108,66 @@
 </header>
 
 <div class="wrap">
-  <div class="row">
-    <button id="btnStartCam">1) Käynnistä kamera</button>
-    <button id="btnStartTrack" disabled>2) Aloita seuranta</button>
-    <button id="btnStop" disabled>Lopeta</button>
-    <button id="btnClear" disabled>Tyhjennä rata</button>
+  <!-- Camera stage -->
+  <div class="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
 
-    <select id="cameraSelect" title="Kamera">
-      <option value="environment">Takakamera</option>
-      <option value="user">Etukamera</option>
-    </select>
+    <!-- Top HUD controls -->
+    <div class="hud">
+      <button id="btnStartCam">1) Kamera</button>
+      <button id="btnStartTrack" disabled>2) Seuranta</button>
+      <button id="btnStop" disabled>Lopeta</button>
+      <button id="btnClear" disabled>Tyhjennä</button>
+
+      <select id="cameraSelect" class="grow" title="Kamera">
+        <option value="environment">Takakamera</option>
+        <option value="user">Etukamera</option>
+      </select>
+    </div>
+
+    <!-- Bottom HUD status -->
+    <div class="hud-bottom">
+      <div class="pill"><b>Suunta</b><span id="dirOut">–</span></div>
+      <div class="pill"><b>Korkeus</b><span id="heightOut">–</span></div>
+      <div class="pill"><b>Pisteet</b><span id="ptsOut">0</span></div>
+    </div>
   </div>
 
-  <div class="card">
+  <!-- Controls -->
+  <div class="card controls">
     <div class="row">
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Herkkyys (liike-ero, pienempi = herkempi)</div>
         <input id="threshold" type="range" min="8" max="60" value="28" />
         <div class="small">Nykyinen: <span id="thresholdVal">28</span></div>
       </div>
 
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Minimialue (yleinen liike, esim. iso kohde)</div>
         <input id="minArea" type="range" min="50" max="5000" value="900" />
         <div class="small">Nykyinen: <span id="minAreaVal">900</span></div>
       </div>
 
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Pikaminimi (kiekko: pieni, nopea liike)</div>
         <input id="minAreaFast" type="range" min="20" max="1500" value="140" />
         <div class="small">Nykyinen: <span id="minAreaFastVal">140</span></div>
       </div>
 
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Maksimialue (suodattaa käden/naaman pois)</div>
         <input id="maxArea" type="range" min="500" max="20000" value="6500" />
         <div class="small">Nykyinen: <span id="maxAreaVal">6500</span></div>
       </div>
 
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Nopeusraja (px/frame) kiekolle</div>
         <input id="speedPx" type="range" min="2" max="40" value="10" />
         <div class="small">Nykyinen: <span id="speedPxVal">10</span></div>
       </div>
 
-      <div style="flex:1; min-width:240px;">
+      <div class="control">
         <div class="label">Lukitus heiton jälkeen (ms)</div>
         <input id="lockMs" type="range" min="0" max="1500" value="450" />
         <div class="small">Nykyinen: <span id="lockMsVal">450</span></div>
@@ -84,37 +175,33 @@
     </div>
 
     <p class="small" style="margin:10px 0 0">
-      Vinkki pimeässä: pidä kädet/naama poissa sinisestä laatikosta ja anna kiekon mennä laatikon läpi.
+      Vinkki pimeässä: pidä kädet/naama pois sinisestä laatikosta ja anna kiekon mennä laatikon läpi.
       Tämä versio suodattaa isot liikkeet pois ja hyväksyy "pienen mutta nopean" liikkeen.
     </p>
   </div>
 
-  <div class="stage">
-    <video id="video" playsinline muted></video>
-    <canvas id="overlay"></canvas>
-  </div>
-
+  <!-- Debug/status -->
   <div class="card">
     <div class="kv">
-      <div>
-        <div class="label">Suunta</div>
-        <div class="value" id="dirOut">–</div>
-        <div class="small" id="dirDbg">–</div>
-      </div>
-      <div>
-        <div class="label">Korkeus</div>
-        <div class="value" id="heightOut">–</div>
-        <div class="small" id="heightDbg">–</div>
-      </div>
       <div>
         <div class="label">Seurannan tila</div>
         <div class="value" id="stateOut">Ei käynnissä</div>
         <div class="small" id="stateDbg">–</div>
       </div>
       <div>
-        <div class="label">Radan pisteet</div>
-        <div class="value" id="ptsOut">0</div>
-        <div class="small" id="dbgOut">–</div>
+        <div class="label">Debug</div>
+        <div class="value" id="dbgOut">–</div>
+        <div class="small">Katso motion/speed/okFast kun testaat.</div>
+      </div>
+      <div>
+        <div class="label">Suunta (debug)</div>
+        <div class="value" id="dirDbg">–</div>
+        <div class="small">dx-arvio</div>
+      </div>
+      <div>
+        <div class="label">Korkeus (debug)</div>
+        <div class="value" id="heightDbg">–</div>
+        <div class="small">ySpan/dy</div>
       </div>
     </div>
   </div>
@@ -347,7 +434,7 @@
       btnStop.disabled = false;
       btnClear.disabled = false;
 
-      setState('Kamera käynnissä', 'Paina “Aloita seuranta” ja pidä kädet/naama pois sinisestä laatikosta.');
+      setState('Kamera käynnissä', 'Paina “Seuranta”. Pidä kädet/naama pois sinisestä laatikosta.');
     } catch (e) {
       setState('Kamera ei käynnisty', String(e));
       alert('Kameran käynnistys epäonnistui. Varmista HTTPS ja kameran lupa.');
@@ -387,7 +474,6 @@
       return;
     }
 
-    // Lock after accepted hit
     if (now < lockedUntil) {
       lastFrame.set(data);
       drawOverlay(null, getROI());
@@ -408,7 +494,6 @@
     const endX = Math.min(procCanvas.width, rpx + rpw);
     const endY = Math.min(procCanvas.height, rpy + rph);
 
-    // Difference stats + centroid
     let minX = procCanvas.width, minYp = procCanvas.height, maxX = 0, maxYp = 0;
     let count = 0;
     let sumX = 0, sumY = 0;
@@ -434,19 +519,15 @@
     lastFrame.set(data);
 
     let foundBox = null;
-    let accepted = false;
 
     if (count > 0) {
-      // Reject HUGE motion (hand/face)
       if (count <= maxArea) {
         const cxp = sumX / count;
         const cyp = sumY / count;
 
-        // Convert centroid to overlay coords
         const cx = Math.round(cxp / sx);
         const cy = Math.round(cyp / sy);
 
-        // Compute "speed" in overlay px/frame
         let speed = 0;
         if (prevCenter) {
           const dx = cx - prevCenter.x;
@@ -454,34 +535,27 @@
           speed = Math.sqrt(dx*dx + dy*dy);
         }
 
-        // Accept rule:
-        // 1) Big enough (minArea) OR
-        // 2) Small but fast (minAreaFast + speed)
         const okBig = count >= minArea;
         const okFast = (count >= minAreaFast) && (speed >= speedNeed);
 
         if (okBig || okFast) {
-          // bounding box to overlay for drawing
           const bx = Math.round(minX / sx);
           const by = Math.round(minYp / sy);
           const bw = Math.max(2, Math.round((maxX - minX) / sx));
           const bh = Math.max(2, Math.round((maxYp - minYp) / sy));
           foundBox = { x: bx, y: by, w: bw, h: bh };
 
-          // add point
           const pt = { x: cx, y: cy, t: now };
           addPoint(pt);
-          accepted = true;
 
-          // lock a bit after accepting to reduce chatter
           const lock = parseInt(lockMsEl.value, 10);
           if (lock > 0) lockedUntil = now + lock;
         }
 
         prevCenter = { x: cx, y: cy };
-        dbgOut.textContent = `motion=${count} speed=${speed.toFixed(1)} px | okBig=${okBig} okFast=${okFast}`;
+        dbgOut.textContent = `motion=${count} speed=${speed.toFixed(1)}px | okBig=${okBig} okFast=${okFast}`;
       } else {
-        dbgOut.textContent = `motion=${count} (YLISUURI → hylätty, nosta maxArea tai pidä käsi poissa ROI:sta)`;
+        dbgOut.textContent = `motion=${count} (YLISUURI → hylätty; pidä käsi/naama pois ROI:sta tai nosta maxArea)`;
       }
     } else {
       dbgOut.textContent = `motion=0`;
@@ -489,7 +563,6 @@
 
     drawOverlay(foundBox, roi);
 
-    // finalize classification after pause
     if (trail.length > 5 && (now - lastFoundAt) > 450) classify();
 
     rafId = requestAnimationFrame(processFrame);
@@ -521,9 +594,9 @@
     setState('Selaimesi ei tue kamera-API:a', 'Käytä Chromea Androidilla ja varmista HTTPS.');
     btnStartCam.disabled = true;
   } else {
-    setState('Valmis', 'Paina “Käynnistä kamera”.');
+    setState('Valmis', 'Paina “Kamera”.');
   }
 })();
 </script>
 </body>
-</html> 
+</html>
