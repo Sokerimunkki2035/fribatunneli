@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Fribatunneli – heiton karkea seuranta (demo)</title>
+  <title>Fribatunneli – heiton karkea seuranta (auto)</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f14; color:#e9eef5; }
     header { padding: 12px 14px; border-bottom: 1px solid #223; background:#0f1722; }
     h1 { font-size: 16px; margin: 0; }
     .wrap { padding: 12px 14px; }
+
     button, select, input[type="range"] {
       background:#172235; color:#e9eef5; border:1px solid #2a3a55; border-radius:10px;
       padding:10px 12px; font-size:14px;
@@ -68,22 +69,14 @@
     }
     .pill b { display:block; font-size: 14px; margin-bottom: 4px; }
 
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-
     .controls .row {
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
     }
-
     @media (min-width: 700px) {
       .controls .row { grid-template-columns: 1fr 1fr; }
     }
-
     .control {
       background:#0b1220;
       border:1px solid #223;
@@ -100,23 +93,23 @@
     }
     .kv > div { background:#0b1220; border:1px solid #223; border-radius:12px; padding:10px; }
     .value { font-size: 16px; font-weight: 650; margin-top: 2px; }
+
+    .on { background: rgba(0,160,90,0.35) !important; border-color: rgba(0,220,120,0.65) !important; }
   </style>
 </head>
 <body>
 <header>
-  <h1>Fribatunneli – heiton karkea seuranta (demo)</h1>
+  <h1>Fribatunneli – heiton karkea seuranta (auto)</h1>
 </header>
 
 <div class="wrap">
-  <!-- Camera stage -->
   <div class="stage">
     <video id="video" playsinline muted></video>
     <canvas id="overlay"></canvas>
 
-    <!-- Top HUD controls -->
     <div class="hud">
       <button id="btnStartCam">1) Kamera</button>
-      <button id="btnStartTrack" disabled>2) Seuranta</button>
+      <button id="btnAuto" disabled>2) Auto-seuranta: OFF</button>
       <button id="btnStop" disabled>Lopeta</button>
       <button id="btnClear" disabled>Tyhjennä</button>
 
@@ -126,7 +119,6 @@
       </select>
     </div>
 
-    <!-- Bottom HUD status -->
     <div class="hud-bottom">
       <div class="pill"><b>Suunta</b><span id="dirOut">–</span></div>
       <div class="pill"><b>Korkeus</b><span id="heightOut">–</span></div>
@@ -134,74 +126,72 @@
     </div>
   </div>
 
-  <!-- Controls -->
   <div class="card controls">
     <div class="row">
       <div class="control">
         <div class="label">Herkkyys (liike-ero, pienempi = herkempi)</div>
-        <input id="threshold" type="range" min="8" max="60" value="28" />
-        <div class="small">Nykyinen: <span id="thresholdVal">28</span></div>
+        <input id="threshold" type="range" min="8" max="60" value="31" />
+        <div class="small">Nykyinen: <span id="thresholdVal">31</span></div>
       </div>
 
       <div class="control">
         <div class="label">Minimialue (yleinen liike, esim. iso kohde)</div>
-        <input id="minArea" type="range" min="50" max="5000" value="900" />
-        <div class="small">Nykyinen: <span id="minAreaVal">900</span></div>
+        <input id="minArea" type="range" min="50" max="5000" value="1200" />
+        <div class="small">Nykyinen: <span id="minAreaVal">1200</span></div>
       </div>
 
       <div class="control">
         <div class="label">Pikaminimi (kiekko: pieni, nopea liike)</div>
-        <input id="minAreaFast" type="range" min="20" max="1500" value="140" />
-        <div class="small">Nykyinen: <span id="minAreaFastVal">140</span></div>
+        <input id="minAreaFast" type="range" min="20" max="1500" value="170" />
+        <div class="small">Nykyinen: <span id="minAreaFastVal">170</span></div>
       </div>
 
       <div class="control">
         <div class="label">Maksimialue (suodattaa käden/naaman pois)</div>
-        <input id="maxArea" type="range" min="500" max="20000" value="6500" />
-        <div class="small">Nykyinen: <span id="maxAreaVal">6500</span></div>
+        <input id="maxArea" type="range" min="500" max="20000" value="12000" />
+        <div class="small">Nykyinen: <span id="maxAreaVal">12000</span></div>
       </div>
 
       <div class="control">
         <div class="label">Nopeusraja (px/frame) kiekolle</div>
-        <input id="speedPx" type="range" min="2" max="40" value="10" />
-        <div class="small">Nykyinen: <span id="speedPxVal">10</span></div>
+        <input id="speedPx" type="range" min="2" max="40" value="6" />
+        <div class="small">Nykyinen: <span id="speedPxVal">6</span></div>
       </div>
 
       <div class="control">
         <div class="label">Lukitus heiton jälkeen (ms)</div>
-        <input id="lockMs" type="range" min="0" max="1500" value="450" />
-        <div class="small">Nykyinen: <span id="lockMsVal">450</span></div>
+        <input id="lockMs" type="range" min="0" max="1500" value="350" />
+        <div class="small">Nykyinen: <span id="lockMsVal">350</span></div>
       </div>
     </div>
 
     <p class="small" style="margin:10px 0 0">
-      Vinkki pimeässä: pidä kädet/naama pois sinisestä laatikosta ja anna kiekon mennä laatikon läpi.
-      Tämä versio suodattaa isot liikkeet pois ja hyväksyy "pienen mutta nopean" liikkeen.
+      Auto-seuranta: laita ON ja heitä. Pidä kädet/naama pois sinisestä laatikosta.
+      Jos käsi “voittaa”, nosta minimialuetta ja/tai laske maxArea/nosta speedPx vähän.
     </p>
   </div>
 
-  <!-- Debug/status -->
   <div class="card">
     <div class="kv">
       <div>
-        <div class="label">Seurannan tila</div>
+        <div class="label">Tila</div>
         <div class="value" id="stateOut">Ei käynnissä</div>
         <div class="small" id="stateDbg">–</div>
       </div>
       <div>
         <div class="label">Debug</div>
         <div class="value" id="dbgOut">–</div>
-        <div class="small">Katso motion/speed/okFast kun testaat.</div>
+        <div class="small">motion / speed / okFast</div>
       </div>
       <div>
         <div class="label">Suunta (debug)</div>
         <div class="value" id="dirDbg">–</div>
-        <div class="small">dx-arvio</div>
+        <div class="small">dx</div>
       </div>
       <div>
         <div class="label">Korkeus (debug)</div>
         <div class="value" id="heightDbg">–</div>
-        <div class="small">ySpan/dy</div>
+        <div class="small">ySpan</div>
       </div>
     </div>
   </div>
@@ -214,7 +204,7 @@
   const ctx = overlay.getContext('2d');
 
   const btnStartCam = document.getElementById('btnStartCam');
-  const btnStartTrack = document.getElementById('btnStartTrack');
+  const btnAuto = document.getElementById('btnAuto');
   const btnStop = document.getElementById('btnStop');
   const btnClear = document.getElementById('btnClear');
   const cameraSelect = document.getElementById('cameraSelect');
@@ -261,20 +251,25 @@
   const pctx = procCanvas.getContext('2d', { willReadFrequently: true });
 
   let lastFrame = null;
-  let tracking = false;
+
+  // Auto mode state
+  let autoOn = false;     // user toggle
+  let armed = false;      // waiting for a valid disc-like event
+  let inThrow = false;    // currently collecting points for a throw
+  let lockedUntil = 0;
+  let lastAcceptedAt = 0;
 
   const trail = [];
-  let lastFoundAt = 0;
-  let lockedUntil = 0;
-
   let firstPt = null;
   let lastPt = null;
   let minY = Infinity, maxY = -Infinity;
 
-  // For "fast" detection
   let prevCenter = null;
 
-  function setState(main, dbg = '') {
+  // Tuning for auto end
+  const END_SILENCE_MS = 350; // after last accepted motion, consider throw ended
+
+  function setState(main, dbg='') {
     stateOut.textContent = main;
     stateDbg.textContent = dbg || '–';
   }
@@ -371,8 +366,21 @@
     heightDbg.textContent = `ySpan=${(ySpan*100).toFixed(1)}% , dy=${dy.toFixed(0)} px`;
   }
 
+  function addPoint(pt) {
+    trail.push(pt);
+    if (!firstPt) firstPt = pt;
+    lastPt = pt;
+    if (pt.y < minY) minY = pt.y;
+    if (pt.y > maxY) maxY = pt.y;
+    if (trail.length > 120) trail.shift(); // allow a bit longer trail
+    ptsOut.textContent = String(trail.length);
+  }
+
   function stopAll() {
-    tracking = false;
+    autoOn = false;
+    armed = false;
+    inThrow = false;
+
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
 
@@ -382,17 +390,13 @@
     }
     video.srcObject = null;
 
-    setState('Ei käynnissä');
-    btnStartTrack.disabled = true;
+    btnAuto.disabled = true;
     btnStop.disabled = true;
     btnClear.disabled = true;
-  }
+    btnAuto.classList.remove('on');
+    btnAuto.textContent = '2) Auto-seuranta: OFF';
 
-  function stopTrackingOnly() {
-    tracking = false;
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
-    setState('Kamera käynnissä', 'Seuranta pysäytetty.');
+    setState('Ei käynnissä');
   }
 
   function resizeCanvases() {
@@ -402,6 +406,7 @@
 
     procCanvas.width = 320;
     procCanvas.height = 180;
+
     lastFrame = null;
     drawOverlay(null, getROI());
   }
@@ -430,33 +435,29 @@
 
       resizeCanvases();
 
-      btnStartTrack.disabled = false;
+      btnAuto.disabled = false;
       btnStop.disabled = false;
       btnClear.disabled = false;
 
-      setState('Kamera käynnissä', 'Paina “Seuranta”. Pidä kädet/naama pois sinisestä laatikosta.');
+      setState('Kamera käynnissä', 'Laita Auto-seuranta ON ja heitä. Pidä kädet/naama pois sinisestä laatikosta.');
     } catch (e) {
       setState('Kamera ei käynnisty', String(e));
       alert('Kameran käynnistys epäonnistui. Varmista HTTPS ja kameran lupa.');
     }
   }
 
-  function addPoint(pt) {
-    trail.push(pt);
-    if (!firstPt) firstPt = pt;
-    lastPt = pt;
-    if (pt.y < minY) minY = pt.y;
-    if (pt.y > maxY) maxY = pt.y;
-    if (trail.length > 80) trail.shift();
-    ptsOut.textContent = String(trail.length);
-    lastFoundAt = pt.t;
+  function ensureLoop() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(processFrame);
   }
 
   function processFrame() {
-    if (!tracking) return;
+    rafId = null;
 
+    if (!stream) return;
     const now = performance.now();
 
+    // draw to processing canvas
     pctx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
     const frame = pctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
     const data = frame.data;
@@ -470,18 +471,27 @@
     if (!lastFrame) {
       lastFrame = new Uint8ClampedArray(data);
       drawOverlay(null, getROI());
-      rafId = requestAnimationFrame(processFrame);
+      ensureLoop();
       return;
     }
 
+    // If auto off, just show ROI and bail
+    const roi = getROI();
+    if (!autoOn) {
+      lastFrame.set(data);
+      drawOverlay(null, roi);
+      ensureLoop();
+      return;
+    }
+
+    // lock after accept to avoid chatter
     if (now < lockedUntil) {
       lastFrame.set(data);
-      drawOverlay(null, getROI());
-      rafId = requestAnimationFrame(processFrame);
+      drawOverlay(null, roi);
+      ensureLoop();
       return;
     }
 
-    const roi = getROI();
     const sx = procCanvas.width / overlay.width;
     const sy = procCanvas.height / overlay.height;
     const rpx = Math.round(roi.x * sx);
@@ -519,6 +529,9 @@
     lastFrame.set(data);
 
     let foundBox = null;
+    let accepted = false;
+    let speed = 0;
+    let okBig = false, okFast = false;
 
     if (count > 0) {
       if (count <= maxArea) {
@@ -528,16 +541,19 @@
         const cx = Math.round(cxp / sx);
         const cy = Math.round(cyp / sy);
 
-        let speed = 0;
         if (prevCenter) {
           const dx = cx - prevCenter.x;
           const dy = cy - prevCenter.y;
           speed = Math.sqrt(dx*dx + dy*dy);
         }
+        prevCenter = { x: cx, y: cy };
 
-        const okBig = count >= minArea;
-        const okFast = (count >= minAreaFast) && (speed >= speedNeed);
+        okBig = count >= minArea;
+        okFast = (count >= minAreaFast) && (speed >= speedNeed);
 
+        // Auto-arming logic:
+        // - when not inThrow, require a "disc-like" accept (okFast OR okBig) to start a throw
+        // - while inThrow, accept points more easily (still require okFast/okBig)
         if (okBig || okFast) {
           const bx = Math.round(minX / sx);
           const by = Math.round(minYp / sy);
@@ -545,49 +561,93 @@
           const bh = Math.max(2, Math.round((maxYp - minYp) / sy));
           foundBox = { x: bx, y: by, w: bw, h: bh };
 
-          const pt = { x: cx, y: cy, t: now };
-          addPoint(pt);
+          if (!inThrow) {
+            // start new throw automatically
+            clearTrail();
+            inThrow = true;
+            armed = false;
+            setState('Heitto havaittu', 'Piirretään…');
+          }
+
+          addPoint({ x: cx, y: cy, t: now });
+          accepted = true;
+          lastAcceptedAt = now;
 
           const lock = parseInt(lockMsEl.value, 10);
           if (lock > 0) lockedUntil = now + lock;
         }
-
-        prevCenter = { x: cx, y: cy };
-        dbgOut.textContent = `motion=${count} speed=${speed.toFixed(1)}px | okBig=${okBig} okFast=${okFast}`;
       } else {
-        dbgOut.textContent = `motion=${count} (YLISUURI → hylätty; pidä käsi/naama pois ROI:sta tai nosta maxArea)`;
+        // too big => likely hand/face
+        // keep armed/inThrow but don't accept
+      }
+    }
+
+    // Debug line
+    if (count === 0) {
+      dbgOut.textContent = `motion=0`;
+    } else if (count > maxArea) {
+      dbgOut.textContent = `motion=${count} (YLISUURI → hylätty)`;
+    } else {
+      dbgOut.textContent = `motion=${count} speed=${speed.toFixed(1)} | okBig=${okBig} okFast=${okFast}`;
+    }
+
+    // End throw automatically after silence
+    if (inThrow) {
+      if ((now - lastAcceptedAt) > END_SILENCE_MS && trail.length >= 2) {
+        classify();
+        inThrow = false;
+        armed = true;
+        setState('Valmis seuraavaan', 'Heitä uudestaan (Auto ON).');
+      } else if ((now - lastAcceptedAt) > 1200 && trail.length < 2) {
+        // if it started but got almost nothing, reset for next attempt
+        inThrow = false;
+        armed = true;
+        clearTrail();
+        setState('Odotetaan heittoa', 'Kiekko ei jäänyt kiinni – kokeile uudestaan.');
       }
     } else {
-      dbgOut.textContent = `motion=0`;
+      // if not in throw, we are waiting
+      if (!armed) armed = true;
+      setState('Odotetaan heittoa', 'Auto ON: heitä ROI:n läpi.');
     }
 
     drawOverlay(foundBox, roi);
 
-    if (trail.length > 5 && (now - lastFoundAt) > 450) classify();
-
-    rafId = requestAnimationFrame(processFrame);
+    ensureLoop();
   }
 
-  function startTracking() {
+  function toggleAuto() {
     if (!stream) return;
-    tracking = true;
-    clearTrail();
+
+    autoOn = !autoOn;
+    btnAuto.classList.toggle('on', autoOn);
+    btnAuto.textContent = autoOn ? '2) Auto-seuranta: ON' : '2) Auto-seuranta: OFF';
+
     lockedUntil = 0;
-    lastFoundAt = 0;
-    setState('Seuranta käynnissä', 'Heitä niin, että kiekko kulkee sinisen laatikon läpi. Pysy itse pois laatikosta.');
-    rafId = requestAnimationFrame(processFrame);
+    lastAcceptedAt = 0;
+    prevCenter = null;
+    lastFrame = null; // reset to avoid false first diff
+
+    inThrow = false;
+    armed = autoOn;
+
+    if (autoOn) {
+      clearTrail();
+      setState('Odotetaan heittoa', 'Auto ON: heitä, kun olet pois sinisestä laatikosta.');
+    } else {
+      setState('Kamera käynnissä', 'Auto OFF: pelkkä kuva + ROI.');
+    }
+
+    ensureLoop();
   }
 
   btnStartCam.addEventListener('click', startCamera);
-  btnStartTrack.addEventListener('click', () => {
-    btnStartTrack.disabled = true;
-    startTracking();
-    setTimeout(()=> btnStartTrack.disabled = false, 400);
-  });
-  btnStop.addEventListener('click', stopTrackingOnly);
+  btnAuto.addEventListener('click', toggleAuto);
+  btnStop.addEventListener('click', stopAll);
   btnClear.addEventListener('click', () => {
     clearTrail();
     drawOverlay(null, getROI());
+    if (autoOn) setState('Odotetaan heittoa', 'Auto ON: heitä uudestaan.');
   });
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
