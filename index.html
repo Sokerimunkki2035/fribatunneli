@@ -4,49 +4,62 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fribatunneli AI - Forehand Analysaattori</title>
-  
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
 
   <style>
-    body { font-family: sans-serif; background: #0b0f14; color: #e9eef5; margin: 0; padding: 20px; text-align: center; }
+    body { font-family: sans-serif; background: #0b0f14; color: #e9eef5; margin: 0; padding: 10px; text-align: center; }
     .container { max-width: 800px; margin: auto; }
     
-    #canvas-container { position: relative; width: 100%; background: #000; border-radius: 15px; overflow: hidden; margin-top: 20px; }
+    #canvas-container { position: relative; width: 100%; background: #000; border-radius: 15px; overflow: hidden; margin-top: 10px; }
     canvas { width: 100%; display: block; }
-    video { display: none; } /* Piilotetaan raakavideo */
+    video { display: none; } 
 
-    .ui-panel { background: #172235; padding: 20px; border-radius: 15px; margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    .stat-box { background: #0f1722; padding: 15px; border-radius: 10px; border: 1px solid #2a3a55; }
-    .stat-value { font-size: 24px; font-weight: bold; color: #00aaff; display: block; }
+    .ui-panel { background: #172235; padding: 15px; border-radius: 15px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-box { background: #0f1722; padding: 10px; border-radius: 10px; border: 1px solid #2a3a55; }
+    .stat-value { font-size: 22px; font-weight: bold; color: #00aaff; display: block; }
     .warning { color: #ff4444 !important; }
 
-    .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; }
+    .controls { background: #172235; padding: 15px; border-radius: 15px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+    .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    
+    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-size: 14px; }
     button:hover { background: #3a4a65; }
     
-    .label { font-size: 12px; opacity: 0.7; text-transform: uppercase; margin-bottom: 5px; display: block; }
+    input[type="range"] { width: 100%; margin-top: 10px; cursor: pointer; }
+    .label { font-size: 11px; opacity: 0.7; text-transform: uppercase; margin-bottom: 3px; display: block; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h1>Fribatunneli AI</h1>
-  <p>Lataa hidastusvideo analysoitavaksi</p>
-
-  <div class="controls">
-    <input type="file" id="upload" accept="video/*">
-    <select id="speed-select">
-      <option value="1">Normaali nopeus</option>
-      <option value="0.5">0.5x Hidastus</option>
-      <option value="0.2">0.2x Super-hidastus</option>
-      <option value="0.1">0.1x Frame-by-frame</option>
-    </select>
-  </div>
+  <h3>Fribatunneli AI</h3>
+  
+  <input type="file" id="upload" accept="video/*">
 
   <div id="canvas-container">
     <video id="video-input" playsinline muted></video>
     <canvas id="output-canvas"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="btn-row">
+      <button id="btn-play">PLAY</button>
+      <button id="btn-pause">PAUSE</button>
+      <button id="btn-stop">STOP / RESET</button>
+    </div>
+    
+    <div class="btn-row">
+      <select id="speed-select">
+        <option value="1">Nopeus: 1x</option>
+        <option value="0.5">Nopeus: 0.5x</option>
+        <option value="0.2">Nopeus: 0.2x</option>
+        <option value="0.05">Nopeus: 0.05x</option>
+      </select>
+    </div>
+
+    <input type="range" id="seek-bar" value="0" step="0.1">
+    <span class="label">Kelaa videota</span>
   </div>
 
   <div class="ui-panel">
@@ -59,23 +72,22 @@
       <span id="status-out" class="stat-value">ODOTTAA</span>
     </div>
   </div>
-
-  <p style="font-size: 13px; color: #888; margin-top: 20px;">
-    Tekoäly analysoi oikean käden (olkapää, kyynärpää, ranne). <br>
-    Jos ranne nousee kyynärpään yläpuolelle irrotuksessa, järjestelmä varoittaa.
-  </p>
 </div>
 
 <script>
 const video = document.getElementById('video-input');
 const canvas = document.getElementById('output-canvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.width > 0 ? canvas.getContext('2d') : null;
 const upload = document.getElementById('upload');
 const speedSelect = document.getElementById('speed-select');
+const seekBar = document.getElementById('seek-bar');
 const angleOut = document.getElementById('angle-out');
 const statusOut = document.getElementById('status-out');
 
-// MediaPipe Pose asetukset
+const btnPlay = document.getElementById('btn-play');
+const btnPause = document.getElementById('btn-pause');
+const btnStop = document.getElementById('btn-stop');
+
 const pose = new Pose({
   locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
@@ -95,17 +107,17 @@ function findAngle(p1, p2, p3) {
 }
 
 pose.onResults((results) => {
+  const canvasCtx = canvas.getContext('2d');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   
-  ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+  canvasCtx.save();
+  canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+  canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
   if (results.poseLandmarks) {
-    // Piirretään luuranko
-    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
-    drawLandmarks(ctx, results.poseLandmarks, {color: '#ff4444', lineWidth: 1, radius: 3});
+    drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
+    drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#ff4444', lineWidth: 1, radius: 3});
 
     const shoulder = results.poseLandmarks[12];
     const elbow = results.poseLandmarks[14];
@@ -115,8 +127,6 @@ pose.onResults((results) => {
       const angle = findAngle(shoulder, elbow, wrist);
       angleOut.innerText = Math.round(angle) + "°";
 
-      // Kämmenheiton virheen tunnistus (Palm Roll)
-      // Jos ranne (y-koordinaatti) on merkittävästi ylempänä kuin kyynärpää
       if (wrist.y < elbow.y - 0.03) {
         statusOut.innerText = "VIRHE: PALM ROLL";
         statusOut.classList.add('warning');
@@ -126,35 +136,47 @@ pose.onResults((results) => {
       }
     }
   }
-  ctx.restore();
+  canvasCtx.restore();
 });
 
-// Videon lataus
 upload.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file) {
     video.src = URL.createObjectURL(file);
     video.load();
-    video.play();
+    video.onloadedmetadata = () => {
+      seekBar.max = video.duration;
+    };
   }
 });
 
-// Toistonopeuden säätö
+btnPlay.addEventListener('click', () => video.play());
+btnPause.addEventListener('click', () => video.pause());
+btnStop.addEventListener('click', () => {
+  video.pause();
+  video.currentTime = 0;
+});
+
 speedSelect.addEventListener('change', (e) => {
   video.playbackRate = parseFloat(e.target.value);
 });
 
-// Jatkuva analyysisilmukka
-async function detect() {
-  if (!video.paused && !video.ended) {
+video.addEventListener('timeupdate', () => {
+  seekBar.value = video.currentTime;
+});
+
+seekBar.addEventListener('input', () => {
+  video.currentTime = seekBar.value;
+});
+
+async function runAnalysis() {
+  if (!video.paused || video.readyState > 2) {
     await pose.send({image: video});
   }
-  requestAnimationFrame(detect);
+  requestAnimationFrame(runAnalysis);
 }
 
-video.addEventListener('play', () => {
-  detect();
-});
+runAnalysis();
 </script>
 </body>
 </html>
