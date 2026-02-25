@@ -1,756 +1,160 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Fribatunneli – heiton seuranta</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fribatunneli AI - Forehand Analysaattori</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+
   <style>
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      margin: 0;
-      background: #0b0f14;
-      color: #e9eef5;
-    }
-    header {
-      padding: 12px 14px;
-      border-bottom: 1px solid #223;
-      background: #0f1722;
-    }
-    h1 {
-      font-size: 16px;
-      margin: 0;
-    }
-    .wrap {
-      padding: 12px 14px;
-    }
-    button, select, input[type="range"] {
-      background: #172235;
-      color: #e9eef5;
-      border: 1px solid #2a3a55;
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 14px;
-    }
-    button:disabled {
-      opacity: 0.5;
-    }
-    .card {
-      background: #0f1722;
-      border: 1px solid #223;
-      border-radius: 14px;
-      padding: 12px;
-      margin-top: 12px;
-    }
-    .small {
-      font-size: 12px;
-      opacity: 0.85;
-    }
-    .stage {
-      position: relative;
-      width: 100%;
-      max-width: 760px;
-      margin: 12px auto;
-    }
-    video, canvas {
-      width: 100%;
-      border-radius: 14px;
-      border: 1px solid #223;
-      display: block;
-    }
-    #overlay {
-      position: absolute;
-      left: 0;
-      top: 0;
-      pointer-events: none;
-    }
-    .hud {
-      position: absolute;
-      left: 10px;
-      right: 10px;
-      top: 10px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      z-index: 5;
-    }
-    .hud button, .hud select {
-      background: rgba(23, 34, 53, 0.92);
-      border: 1px solid rgba(42, 58, 85, 0.95);
-      backdrop-filter: blur(6px);
-    }
-    .hud button {
-      padding: 12px 14px;
-      font-size: 15px;
-      border-radius: 14px;
-    }
-    .hud .grow {
-      flex: 1 1 auto;
-      min-width: 160px;
-    }
-    .hud-bottom {
-      position: absolute;
-      left: 10px;
-      right: 10px;
-      bottom: 10px;
-      display: flex;
-      gap: 10px;
-      z-index: 5;
-    }
-    .pill {
-      flex: 1 1 0;
-      background: rgba(15, 23, 34, 0.78);
-      border: 1px solid rgba(34, 35, 51, 0.9);
-      border-radius: 14px;
-      padding: 10px 12px;
-      backdrop-filter: blur(6px);
-      font-size: 13px;
-      min-width: 120px;
-    }
-    .pill b {
-      display: block;
-      font-size: 14px;
-      margin-bottom: 4px;
-    }
-    .controls .row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-    @media (min-width: 700px) {
-      .controls .row {
-        grid-template-columns: 1fr 1fr;
-      }
-    }
-    .control {
-      background: #0b1220;
-      border: 1px solid #223;
-      border-radius: 12px;
-      padding: 10px;
-    }
-    .label {
-      font-size: 12px;
-      opacity: 0.85;
-      margin-bottom: 8px;
-    }
-    .kv {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .kv > div {
-      background: #0b1220;
-      border: 1px solid #223;
-      border-radius: 12px;
-      padding: 10px;
-    }
-    .value {
-      font-size: 16px;
-      font-weight: 650;
-      margin-top: 2px;
-    }
-    .on {
-      background: rgba(0, 160, 90, 0.35) !important;
-      border-color: rgba(0, 220, 120, 0.65) !important;
-    }
+    body { font-family: sans-serif; background: #0b0f14; color: #e9eef5; margin: 0; padding: 20px; text-align: center; }
+    .container { max-width: 800px; margin: auto; }
+    
+    #canvas-container { position: relative; width: 100%; background: #000; border-radius: 15px; overflow: hidden; margin-top: 20px; }
+    canvas { width: 100%; display: block; }
+    video { display: none; } /* Piilotetaan raakavideo */
+
+    .ui-panel { background: #172235; padding: 20px; border-radius: 15px; margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .stat-box { background: #0f1722; padding: 15px; border-radius: 10px; border: 1px solid #2a3a55; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #00aaff; display: block; }
+    .warning { color: #ff4444 !important; }
+
+    .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #3a4a65; }
+    
+    .label { font-size: 12px; opacity: 0.7; text-transform: uppercase; margin-bottom: 5px; display: block; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Fribatunneli – heiton seuranta</h1>
-  </header>
 
-  <div class="wrap">
-    <div class="stage">
-      <video id="video" playsinline muted></video>
-      <canvas id="overlay"></canvas>
+<div class="container">
+  <h1>Fribatunneli AI</h1>
+  <p>Lataa hidastusvideo analysoitavaksi</p>
 
-      <div class="hud">
-        <button id="btnStartCam">1) Kamera</button>
-        <button id="btnAuto" disabled>2) Auto-seuranta: OFF</button>
-        <button id="btnStop" disabled>Lopeta</button>
-        <button id="btnClear" disabled>Tyhjennä</button>
-        <button id="btnCaptureBg">Ota taustakuva</button>
+  <div class="controls">
+    <input type="file" id="upload" accept="video/*">
+    <select id="speed-select">
+      <option value="1">Normaali nopeus</option>
+      <option value="0.5">0.5x Hidastus</option>
+      <option value="0.2">0.2x Super-hidastus</option>
+      <option value="0.1">0.1x Frame-by-frame</option>
+    </select>
+  </div>
 
-        <select id="cameraSelect" class="grow" title="Kamera">
-          <option value="environment">Takakamera</option>
-          <option value="user">Etukamera</option>
-        </select>
-      </div>
+  <div id="canvas-container">
+    <video id="video-input" playsinline muted></video>
+    <canvas id="output-canvas"></canvas>
+  </div>
 
-      <div class="hud-bottom">
-        <div class="pill"><b>Suunta</b><span id="dirOut">–</span></div>
-        <div class="pill"><b>Korkeus</b><span id="heightOut">–</span></div>
-        <div class="pill"><b>Nopeus</b><span id="speedOut">–</span></div>
-        <div class="pill"><b>Kulma</b><span id="angleOut">–</span></div>
-        <div class="pill"><b>Pisteet</b><span id="ptsOut">0</span></div>
-      </div>
+  <div class="ui-panel">
+    <div class="stat-box">
+      <span class="label">Kyynärkulma</span>
+      <span id="angle-out" class="stat-value">0°</span>
     </div>
-
-    <div class="card controls">
-      <div class="row">
-        <div class="control">
-          <div class="label">Herkkyys (liike-ero, pienempi = herkempi)</div>
-          <input id="threshold" type="range" min="8" max="60" value="31" />
-          <div class="small">Nykyinen: <span id="thresholdVal">31</span></div>
-        </div>
-
-        <div class="control">
-          <div class="label">Minimialue (yleinen liike, esim. iso kohde)</div>
-          <input id="minArea" type="range" min="50" max="5000" value="1200" />
-          <div class="small">Nykyinen: <span id="minAreaVal">1200</span></div>
-        </div>
-
-        <div class="control">
-          <div class="label">Pikaminimi (kiekko: pieni, nopea liike)</div>
-          <input id="minAreaFast" type="range" min="20" max="1500" value="170" />
-          <div class="small">Nykyinen: <span id="minAreaFastVal">170</span></div>
-        </div>
-
-        <div class="control">
-          <div class="label">Maksimialue (suodattaa käden/naaman pois)</div>
-          <input id="maxArea" type="range" min="500" max="20000" value="12000" />
-          <div class="small">Nykyinen: <span id="maxAreaVal">12000</span></div>
-        </div>
-
-        <div class="control">
-          <div class="label">Nopeusraja (px/frame) kiekolle</div>
-          <input id="speedPx" type="range" min="2" max="40" value="6" />
-          <div class="small">Nykyinen: <span id="speedPxVal">6</span></div>
-        </div>
-
-        <div class="control">
-          <div class="label">Lukitus heiton jälkeen (ms)</div>
-          <input id="lockMs" type="range" min="0" max="1500" value="350" />
-          <div class="small">Nykyinen: <span id="lockMsVal">350</span></div>
-        </div>
-      </div>
-
-      <p class="small" style="margin: 10px 0 0">
-        Auto-seuranta: laita ON ja heitä. Pidä kädet/naama pois sinisestä laatikosta.
-        Jos käsi “voittaa”, nosta minimialuetta ja/tai laske maxArea/nosta speedPx vähän.
-      </p>
-    </div>
-
-    <div class="card">
-      <div class="kv">
-        <div>
-          <div class="label">Tila</div>
-          <div class="value" id="stateOut">Ei käynnissä</div>
-          <div class="small" id="stateDbg">–</div>
-        </div>
-        <div>
-          <div class="label">Debug</div>
-          <div class="value" id="dbgOut">–</div>
-          <div class="small">motion / speed / okFast</div>
-        </div>
-        <div>
-          <div class="label">Suunta (debug)</div>
-          <div class="value" id="dirDbg">–</div>
-          <div class="small">dx</div>
-        </div>
-        <div>
-          <div class="label">Korkeus (debug)</div>
-          <div class="value" id="heightDbg">–</div>
-          <div class="small">ySpan</div>
-        </div>
-      </div>
+    <div id="wrist-card" class="stat-box">
+      <span class="label">Ranteen asento</span>
+      <span id="status-out" class="stat-value">ODOTTAA</span>
     </div>
   </div>
 
-  <script>
-    (() => {
-      const video = document.getElementById('video');
-      const overlay = document.getElementById('overlay');
-      const ctx = overlay.getContext('2d');
-
-      const btnStartCam = document.getElementById('btnStartCam');
-      const btnAuto = document.getElementById('btnAuto');
-      const btnStop = document.getElementById('btnStop');
-      const btnClear = document.getElementById('btnClear');
-      const btnCaptureBg = document.getElementById('btnCaptureBg');
-      const cameraSelect = document.getElementById('cameraSelect');
-
-      const thresholdEl = document.getElementById('threshold');
-      const minAreaEl = document.getElementById('minArea');
-      const minAreaFastEl = document.getElementById('minAreaFast');
-      const maxAreaEl = document.getElementById('maxArea');
-      const speedPxEl = document.getElementById('speedPx');
-      const lockMsEl = document.getElementById('lockMs');
-
-      const thresholdVal = document.getElementById('thresholdVal');
-      const minAreaVal = document.getElementById('minAreaVal');
-      const minAreaFastVal = document.getElementById('minAreaFastVal');
-      const maxAreaVal = document.getElementById('maxAreaVal');
-      const speedPxVal = document.getElementById('speedPxVal');
-      const lockMsVal = document.getElementById('lockMsVal');
-
-      const dirOut = document.getElementById('dirOut');
-      const heightOut = document.getElementById('heightOut');
-      const speedOut = document.getElementById('speedOut');
-      const angleOut = document.getElementById('angleOut');
-      const stateOut = document.getElementById('stateOut');
-      const ptsOut = document.getElementById('ptsOut');
-      const dirDbg = document.getElementById('dirDbg');
-      const heightDbg = document.getElementById('heightDbg');
-      const stateDbg = document.getElementById('stateDbg');
-      const dbgOut = document.getElementById('dbgOut');
-
-      function bindRange(el, out) {
-        const upd = () => out.textContent = el.value;
-        el.addEventListener('input', upd);
-        upd();
-      }
-      bindRange(thresholdEl, thresholdVal);
-      bindRange(minAreaEl, minAreaVal);
-      bindRange(minAreaFastEl, minAreaFastVal);
-      bindRange(maxAreaEl, maxAreaVal);
-      bindRange(speedPxEl, speedPxVal);
-      bindRange(lockMsEl, lockMsVal);
-
-      let stream = null;
-      let rafId = null;
-      let backgroundImage = null;
-
-      const procCanvas = document.createElement('canvas');
-      const pctx = procCanvas.getContext('2d', { willReadFrequently: true });
-
-      let lastFrame = null;
-
-      // Auto mode state
-      let autoOn = false;
-      let armed = false;
-      let inThrow = false;
-      let lockedUntil = 0;
-      let lastAcceptedAt = 0;
-
-      const trail = [];
-      let firstPt = null;
-      let lastPt = null;
-      let minY = Infinity, maxY = -Infinity;
-
-      let prevCenter = null;
-
-      // Tuning for auto end
-      const END_SILENCE_MS = 350;
-
-      function setState(main, dbg = '') {
-        stateOut.textContent = main;
-        stateDbg.textContent = dbg || '–';
-      }
-
-      function clearTrail() {
-        trail.length = 0;
-        firstPt = null;
-        lastPt = null;
-        minY = Infinity;
-        maxY = -Infinity;
-        prevCenter = null;
-        ptsOut.textContent = '0';
-        dirOut.textContent = '–';
-        heightOut.textContent = '–';
-        speedOut.textContent = '–';
-        angleOut.textContent = '–';
-        dirDbg.textContent = '–';
-        heightDbg.textContent = '–';
-        dbgOut.textContent = '–';
-      }
-
-      function getROI() {
-        const w = overlay.width, h = overlay.height;
-        const roiW = Math.round(w * 0.55);
-        const roiH = Math.round(h * 0.55);
-        return {
-          x: Math.round((w - roiW) / 2),
-          y: Math.round((h - roiH) / 2),
-          w: roiW,
-          h: roiH
-        };
-      }
-
-      function drawOverlay(foundBox = null, roi = null) {
-        const w = overlay.width, h = overlay.height;
-        ctx.clearRect(0, 0, w, h);
-
-        if (roi) {
-          ctx.strokeStyle = 'rgba(0,200,255,0.9)';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(roi.x, roi.y, roi.w, roi.h);
-          ctx.fillStyle = 'rgba(0,200,255,0.08)';
-          ctx.fillRect(roi.x, roi.y, roi.w, roi.h);
-        }
-
-        if (trail.length > 1) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(trail[0].x, trail[0].y);
-          for (let i = 1; i < trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
-          ctx.stroke();
-
-          const lp = trail[trail.length - 1];
-          ctx.fillStyle = 'rgba(255,255,255,0.95)';
-          ctx.beginPath();
-          ctx.arc(lp.x, lp.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        if (foundBox) {
-          ctx.strokeStyle = 'rgba(0,255,120,0.95)';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(foundBox.x, foundBox.y, foundBox.w, foundBox.h);
-        }
-      }
-
-      function classify() {
-        if (!firstPt || !lastPt) return;
-
-        const dx = lastPt.x - firstPt.x;
-        const dy = lastPt.y - firstPt.y;
-
-        const w = overlay.width;
-        const dxNorm = dx / Math.max(1, w);
-
-        let dir = 'Suora';
-        if (dxNorm > 0.08) dir = 'Oikealle';
-        else if (dxNorm < -0.08) dir = 'Vasemmalle';
-
-        const h = overlay.height;
-        const ySpan = (maxY - minY) / Math.max(1, h);
-
-        let ht = 'Keskikorkea';
-        if (ySpan < 0.08) ht = 'Tasainen';
-        else {
-          const dyNorm = dy / Math.max(1, h);
-          if (dyNorm < -0.05) ht = 'Korkea';
-          else if (dyNorm > 0.05) ht = 'Matala';
-          else ht = 'Keskikorkea';
-        }
-
-        dirOut.textContent = dir;
-        heightOut.textContent = ht;
-
-        dirDbg.textContent = `dx=${dx.toFixed(0)} px (${(dxNorm * 100).toFixed(1)}%)`;
-        heightDbg.textContent = `ySpan=${(ySpan * 100).toFixed(1)}% , dy=${dy.toFixed(0)} px`;
-
-        // Calculate speed and angle
-        if (trail.length > 1) {
-          const timeDiff = (trail[trail.length - 1].t - trail[0].t) / 1000; // ms to s
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const speed = distance / timeDiff; // px/s
-          speedOut.textContent = speed ? speed.toFixed(1) + ' px/s' : '–';
-
-          const angleRad = Math.atan2(dy, dx);
-          const angleDeg = (angleRad * 180) / Math.PI;
-          angleOut.textContent = angleDeg ? angleDeg.toFixed(1) + '°' : '–';
-        }
-      }
-
-      function addPoint(pt) {
-        trail.push(pt);
-        if (!firstPt) firstPt = pt;
-        lastPt = pt;
-        if (pt.y < minY) minY = pt.y;
-        if (pt.y > maxY) maxY = pt.y;
-        if (trail.length > 120) trail.shift();
-        ptsOut.textContent = String(trail.length);
-      }
-
-      function stopAll() {
-        autoOn = false;
-        armed = false;
-        inThrow = false;
-
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = null;
-
-        if (stream) {
-          stream.getTracks().forEach(t => t.stop());
-          stream = null;
-        }
-        video.srcObject = null;
-
-        btnAuto.disabled = true;
-        btnStop.disabled = true;
-        btnClear.disabled = true;
-        btnAuto.classList.remove('on');
-        btnAuto.textContent = '2) Auto-seuranta: OFF';
-
-        setState('Ei käynnissä');
-      }
-
-      function resizeCanvases() {
-        const rect = video.getBoundingClientRect();
-        overlay.width = Math.round(rect.width);
-        overlay.height = Math.round(rect.height);
-
-        procCanvas.width = 320;
-        procCanvas.height = 180;
-
-        lastFrame = null;
-        drawOverlay(null, getROI());
-      }
-
-      function captureBackground() {
-        pctx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
-        backgroundImage = pctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
-        setState('Taustakuva otettu', 'Heitä kiekko.');
-      }
-
-      window.addEventListener('resize', () => {
-        if (stream) resizeCanvases();
-      });
-
-      async function startCamera() {
-        stopAll();
-
-        const facingMode = cameraSelect.value;
-        const constraints = {
-          audio: false,
-          video: {
-            facingMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        };
-
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          video.srcObject = stream;
-          await video.play();
-
-          resizeCanvases();
-
-          btnAuto.disabled = false;
-          btnStop.disabled = false;
-          btnClear.disabled = false;
-
-          setState('Kamera käynnissä', 'Ota taustakuva ja laita Auto-seuranta ON.');
-        } catch (e) {
-          setState('Kamera ei käynnisty', String(e));
-          alert('Kameran käynnistys epäonnistui. Varmista HTTPS ja kameran lupa.');
-        }
-      }
-
-      function ensureLoop() {
-        if (rafId) return;
-        rafId = requestAnimationFrame(processFrame);
-      }
-
-      function processFrame() {
-        rafId = null;
-
-        if (!stream) return;
-        const now = performance.now();
-
-        // Draw to processing canvas
-        pctx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
-        const frame = pctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
-        const data = frame.data;
-
-        const thr = parseInt(thresholdEl.value, 10);
-        const minArea = parseInt(minAreaEl.value, 10);
-        const minAreaFast = parseInt(minAreaFastEl.value, 10);
-        const maxArea = parseInt(maxAreaEl.value, 10);
-        const speedNeed = parseInt(speedPxEl.value, 10);
-
-        if (!lastFrame) {
-          lastFrame = new Uint8ClampedArray(data);
-          drawOverlay(null, getROI());
-          ensureLoop();
-          return;
-        }
-
-        // If auto off, just show ROI and bail
-        const roi = getROI();
-        if (!autoOn) {
-          lastFrame.set(data);
-          drawOverlay(null, roi);
-          ensureLoop();
-          return;
-        }
-
-        // Lock after accept to avoid chatter
-        if (now < lockedUntil) {
-          lastFrame.set(data);
-          drawOverlay(null, roi);
-          ensureLoop();
-          return;
-        }
-
-        // Background subtraction
-        if (backgroundImage) {
-          const bgData = backgroundImage.data;
-          for (let i = 0; i < data.length; i += 4) {
-            const diff = Math.abs(data[i] - bgData[i]) +
-                         Math.abs(data[i + 1] - bgData[i + 1]) +
-                         Math.abs(data[i + 2] - bgData[i + 2]);
-
-            if (diff < thr) {
-              data[i] = data[i + 1] = data[i + 2] = 0; // Remove background
-            }
-          }
-        }
-
-        const sx = procCanvas.width / overlay.width;
-        const sy = procCanvas.height / overlay.height;
-        const rpx = Math.round(roi.x * sx);
-        const rpy = Math.round(roi.y * sy);
-        const rpw = Math.round(roi.w * sx);
-        const rph = Math.round(roi.h * sy);
-
-        const startX = Math.max(0, rpx);
-        const startY = Math.max(0, rpy);
-        const endX = Math.min(procCanvas.width, rpx + rpw);
-        const endY = Math.min(procCanvas.height, rpy + rph);
-
-        let minX = procCanvas.width, minYp = procCanvas.height, maxX = 0, maxYp = 0;
-        let count = 0;
-        let sumX = 0, sumY = 0;
-
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            const i = (y * procCanvas.width + x) * 4;
-            const g = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            const pg = (lastFrame[i] + lastFrame[i + 1] + lastFrame[i + 2]) / 3;
-            const diff = Math.abs(g - pg);
-
-            if (diff > thr) {
-              count++;
-              sumX += x;
-              sumY += y;
-              if (x < minX) minX = x;
-              if (y < minYp) minYp = y;
-              if (x > maxX) maxX = x;
-              if (y > maxYp) maxYp = y;
-            }
-          }
-        }
-
-        lastFrame.set(data);
-
-        let foundBox = null;
-        let accepted = false;
-        let speed = 0;
-        let okBig = false, okFast = false;
-
-        if (count > 0) {
-          if (count <= maxArea) {
-            const cxp = sumX / count;
-            const cyp = sumY / count;
-
-            const cx = Math.round(cxp / sx);
-            const cy = Math.round(cyp / sy);
-
-            if (prevCenter) {
-              const dx = cx - prevCenter.x;
-              const dy = cy - prevCenter.y;
-              speed = Math.sqrt(dx * dx + dy * dy);
-            }
-            prevCenter = { x: cx, y: cy };
-
-            okBig = count >= minArea;
-            okFast = (count >= minAreaFast) && (speed >= speedNeed);
-
-            if (okBig || okFast) {
-              const bx = Math.round(minX / sx);
-              const by = Math.round(minYp / sy);
-              const bw = Math.max(2, Math.round((maxX - minX) / sx));
-              const bh = Math.max(2, Math.round((maxYp - minYp) / sy));
-              foundBox = { x: bx, y: by, w: bw, h: bh };
-
-              if (!inThrow) {
-                clearTrail();
-                inThrow = true;
-                armed = false;
-                setState('Heitto havaittu', 'Piirretään…');
-              }
-
-              addPoint({ x: cx, y: cy, t: now });
-              accepted = true;
-              lastAcceptedAt = now;
-
-              const lock = parseInt(lockMsEl.value, 10);
-              if (lock > 0) lockedUntil = now + lock;
-            }
-          }
-        }
-
-        // Debug line
-        if (count === 0) {
-          dbgOut.textContent = `motion=0`;
-        } else if (count > maxArea) {
-          dbgOut.textContent = `motion=${count} (YLISUURI → hylätty)`;
-        } else {
-          dbgOut.textContent = `motion=${count} speed=${speed.toFixed(1)} | okBig=${okBig} okFast=${okFast}`;
-        }
-
-        // End throw automatically after silence
-        if (inThrow) {
-          if ((now - lastAcceptedAt) > END_SILENCE_MS && trail.length >= 2) {
-            classify();
-            inThrow = false;
-            armed = true;
-            setState('Valmis seuraavaan', 'Heitä uudestaan (Auto ON).');
-          } else if ((now - lastAcceptedAt) > 1200 && trail.length < 2) {
-            inThrow = false;
-            armed = true;
-            clearTrail();
-            setState('Odotetaan heittoa', 'Kiekko ei jäänyt kiinni – kokeile uudestaan.');
-          }
-        } else {
-          if (!armed) armed = true;
-          setState('Odotetaan heittoa', 'Auto ON: heitä ROI:n läpi.');
-        }
-
-        drawOverlay(foundBox, roi);
-
-        ensureLoop();
-      }
-
-      function toggleAuto() {
-        if (!stream) return;
-
-        autoOn = !autoOn;
-        btnAuto.classList.toggle('on', autoOn);
-        btnAuto.textContent = autoOn ? '2) Auto-seuranta: ON' : '2) Auto-seuranta: OFF';
-
-        lockedUntil = 0;
-        lastAcceptedAt = 0;
-        prevCenter = null;
-        lastFrame = null;
-
-        inThrow = false;
-        armed = autoOn;
-
-        if (autoOn) {
-          clearTrail();
-          setState('Odotetaan heittoa', 'Auto ON: heitä, kun olet pois sinisestä laatikosta.');
-        } else {
-          setState('Kamera käynnissä', 'Auto OFF: pelkkä kuva + ROI.');
-        }
-
-        ensureLoop();
-      }
-
-      btnStartCam.addEventListener('click', startCamera);
-      btnAuto.addEventListener('click', toggleAuto);
-      btnStop.addEventListener('click', stopAll);
-      btnClear.addEventListener('click', () => {
-        clearTrail();
-        drawOverlay(null, getROI());
-        if (autoOn) setState('Odotetaan heittoa', 'Auto ON: heitä uudestaan.');
-      });
-      btnCaptureBg.addEventListener('click', captureBackground);
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setState('Selaimesi ei tue kamera-API:a', 'Käytä Chromea Androidilla ja varmista HTTPS.');
-        btnStartCam.disabled = true;
+  <p style="font-size: 13px; color: #888; margin-top: 20px;">
+    Tekoäly analysoi oikean käden (olkapää, kyynärpää, ranne). <br>
+    Jos ranne nousee kyynärpään yläpuolelle irrotuksessa, järjestelmä varoittaa.
+  </p>
+</div>
+
+<script>
+const video = document.getElementById('video-input');
+const canvas = document.getElementById('output-canvas');
+const ctx = canvas.getContext('2d');
+const upload = document.getElementById('upload');
+const speedSelect = document.getElementById('speed-select');
+const angleOut = document.getElementById('angle-out');
+const statusOut = document.getElementById('status-out');
+
+// MediaPipe Pose asetukset
+const pose = new Pose({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+});
+
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+function findAngle(p1, p2, p3) {
+  const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
+  let angle = Math.abs(radians * 180.0 / Math.PI);
+  if (angle > 180.0) angle = 360 - angle;
+  return angle;
+}
+
+pose.onResults((results) => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  if (results.poseLandmarks) {
+    // Piirretään luuranko
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
+    drawLandmarks(ctx, results.poseLandmarks, {color: '#ff4444', lineWidth: 1, radius: 3});
+
+    const shoulder = results.poseLandmarks[12];
+    const elbow = results.poseLandmarks[14];
+    const wrist = results.poseLandmarks[16];
+
+    if (shoulder && elbow && wrist) {
+      const angle = findAngle(shoulder, elbow, wrist);
+      angleOut.innerText = Math.round(angle) + "°";
+
+      // Kämmenheiton virheen tunnistus (Palm Roll)
+      // Jos ranne (y-koordinaatti) on merkittävästi ylempänä kuin kyynärpää
+      if (wrist.y < elbow.y - 0.03) {
+        statusOut.innerText = "VIRHE: PALM ROLL";
+        statusOut.classList.add('warning');
       } else {
-        setState('Valmis', 'Paina “Kamera”.');
+        statusOut.innerText = "OK";
+        statusOut.classList.remove('warning');
       }
-    })();
-  </script>
+    }
+  }
+  ctx.restore();
+});
+
+// Videon lataus
+upload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    video.src = URL.createObjectURL(file);
+    video.load();
+    video.play();
+  }
+});
+
+// Toistonopeuden säätö
+speedSelect.addEventListener('change', (e) => {
+  video.playbackRate = parseFloat(e.target.value);
+});
+
+// Jatkuva analyysisilmukka
+async function detect() {
+  if (!video.paused && !video.ended) {
+    await pose.send({image: video});
+  }
+  requestAnimationFrame(detect);
+}
+
+video.addEventListener('play', () => {
+  detect();
+});
+</script>
 </body>
 </html>
