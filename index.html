@@ -3,38 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fribatunneli AI - Forehand Analysaattori</title>
+  <title>Fribatunneli AI - Pro Analysaattori</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
 
   <style>
     body { font-family: sans-serif; background: #0b0f14; color: #e9eef5; margin: 0; padding: 10px; text-align: center; }
     .container { max-width: 800px; margin: auto; }
-    
     #canvas-container { position: relative; width: 100%; background: #000; border-radius: 15px; overflow: hidden; margin-top: 10px; }
     canvas { width: 100%; display: block; }
     video { display: none; } 
-
     .ui-panel { background: #172235; padding: 15px; border-radius: 15px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .stat-box { background: #0f1722; padding: 10px; border-radius: 10px; border: 1px solid #2a3a55; }
-    .stat-value { font-size: 22px; font-weight: bold; color: #00aaff; display: block; }
+    .stat-value { font-size: 20px; font-weight: bold; color: #00aaff; display: block; }
     .warning { color: #ff4444 !important; }
-
     .controls { background: #172235; padding: 15px; border-radius: 15px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
     .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-    
-    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-size: 14px; }
-    button:hover { background: #3a4a65; }
-    
-    input[type="range"] { width: 100%; margin-top: 10px; cursor: pointer; }
-    .label { font-size: 11px; opacity: 0.7; text-transform: uppercase; margin-bottom: 3px; display: block; }
+    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; }
+    input[type="range"] { width: 100%; margin-top: 10px; }
+    .label { font-size: 11px; opacity: 0.7; text-transform: uppercase; display: block; margin-bottom: 3px; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h3>Fribatunneli AI</h3>
-  
+  <h3>Fribatunneli AI - Tekniikka-analyysi</h3>
   <input type="file" id="upload" accept="video/*">
 
   <div id="canvas-container">
@@ -46,20 +39,14 @@
     <div class="btn-row">
       <button id="btn-play">PLAY</button>
       <button id="btn-pause">PAUSE</button>
-      <button id="btn-stop">STOP / RESET</button>
-    </div>
-    
-    <div class="btn-row">
+      <button id="btn-stop">RESET</button>
       <select id="speed-select">
-        <option value="1">Nopeus: 1x</option>
-        <option value="0.5">Nopeus: 0.5x</option>
-        <option value="0.2">Nopeus: 0.2x</option>
-        <option value="0.05">Nopeus: 0.05x</option>
+        <option value="1">1x</option>
+        <option value="0.2">0.2x</option>
+        <option value="0.05">0.05x</option>
       </select>
     </div>
-
     <input type="range" id="seek-bar" value="0" step="0.1">
-    <span class="label">Kelaa videota</span>
   </div>
 
   <div class="ui-panel">
@@ -67,9 +54,17 @@
       <span class="label">Kyynärkulma</span>
       <span id="angle-out" class="stat-value">0°</span>
     </div>
-    <div id="wrist-card" class="stat-box">
-      <span class="label">Ranteen asento</span>
-      <span id="status-out" class="stat-value">ODOTTAA</span>
+    <div class="stat-box">
+      <span class="label">Ranne (Palm Roll)</span>
+      <span id="status-out" class="stat-value">OK</span>
+    </div>
+    <div class="stat-box">
+      <span class="label">Kyynärpään korkeus</span>
+      <span id="elbow-height" class="stat-value">OK</span>
+    </div>
+    <div class="stat-box">
+      <span class="label">Veto-linja</span>
+      <span id="line-status" class="stat-value">SUORA</span>
     </div>
   </div>
 </div>
@@ -77,12 +72,13 @@
 <script>
 const video = document.getElementById('video-input');
 const canvas = document.getElementById('output-canvas');
-const ctx = canvas.width > 0 ? canvas.getContext('2d') : null;
 const upload = document.getElementById('upload');
 const speedSelect = document.getElementById('speed-select');
 const seekBar = document.getElementById('seek-bar');
 const angleOut = document.getElementById('angle-out');
 const statusOut = document.getElementById('status-out');
+const elbowHeightOut = document.getElementById('elbow-height');
+const lineStatusOut = document.getElementById('line-status');
 
 const btnPlay = document.getElementById('btn-play');
 const btnPause = document.getElementById('btn-pause');
@@ -92,12 +88,7 @@ const pose = new Pose({
   locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
 
-pose.setOptions({
-  modelComplexity: 1,
-  smoothLandmarks: true,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
-});
+pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
 function findAngle(p1, p2, p3) {
   const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
@@ -110,29 +101,48 @@ pose.onResults((results) => {
   const canvasCtx = canvas.getContext('2d');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
   canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
   if (results.poseLandmarks) {
     drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
-    drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#ff4444', lineWidth: 1, radius: 3});
+    
+    const s = results.poseLandmarks[12]; // Olkapää
+    const e = results.poseLandmarks[14]; // Kyynärpää
+    const w = results.poseLandmarks[16]; // Ranne
 
-    const shoulder = results.poseLandmarks[12];
-    const elbow = results.poseLandmarks[14];
-    const wrist = results.poseLandmarks[16];
-
-    if (shoulder && elbow && wrist) {
-      const angle = findAngle(shoulder, elbow, wrist);
+    if (s && e && w) {
+      // 1. Kyynärkulma
+      const angle = findAngle(s, e, w);
       angleOut.innerText = Math.round(angle) + "°";
 
-      if (wrist.y < elbow.y - 0.03) {
-        statusOut.innerText = "VIRHE: PALM ROLL";
+      // 2. Palm Roll (Ranne nousee liikaa)
+      if (w.y < e.y - 0.04) {
+        statusOut.innerText = "LIIAN KORKEA";
         statusOut.classList.add('warning');
       } else {
         statusOut.innerText = "OK";
         statusOut.classList.remove('warning');
+      }
+
+      // 3. Kyynärpään korkeus (Jos kyynärpää nousee olkapään tasolle -> Nose Up vaara)
+      if (e.y < s.y + 0.05) {
+        elbowHeightOut.innerText = "LIIAN YLHÄÄLLÄ";
+        elbowHeightOut.classList.add('warning');
+      } else {
+        elbowHeightOut.innerText = "OK (ALHAALLA)";
+        elbowHeightOut.classList.remove('warning');
+      }
+
+      // 4. Vedon suoruus (Pystysuuntainen heilahtelu)
+      const verticalDiff = Math.abs(s.y - w.y);
+      if (verticalDiff > 0.2) {
+        lineStatusOut.innerText = "EPÄTASAINEN";
+        lineStatusOut.classList.add('warning');
+      } else {
+        lineStatusOut.innerText = "SUORA";
+        lineStatusOut.classList.remove('warning');
       }
     }
   }
@@ -143,40 +153,22 @@ upload.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file) {
     video.src = URL.createObjectURL(file);
-    video.load();
-    video.onloadedmetadata = () => {
-      seekBar.max = video.duration;
-    };
+    video.onloadedmetadata = () => { seekBar.max = video.duration; };
   }
 });
 
 btnPlay.addEventListener('click', () => video.play());
 btnPause.addEventListener('click', () => video.pause());
-btnStop.addEventListener('click', () => {
-  video.pause();
-  video.currentTime = 0;
-});
+btnStop.addEventListener('click', () => { video.pause(); video.currentTime = 0; });
+speedSelect.addEventListener('change', (e) => { video.playbackRate = parseFloat(e.target.value); });
+video.addEventListener('timeupdate', () => { seekBar.value = video.currentTime; });
+seekBar.addEventListener('input', () => { video.currentTime = seekBar.value; });
 
-speedSelect.addEventListener('change', (e) => {
-  video.playbackRate = parseFloat(e.target.value);
-});
-
-video.addEventListener('timeupdate', () => {
-  seekBar.value = video.currentTime;
-});
-
-seekBar.addEventListener('input', () => {
-  video.currentTime = seekBar.value;
-});
-
-async function runAnalysis() {
-  if (!video.paused || video.readyState > 2) {
-    await pose.send({image: video});
-  }
-  requestAnimationFrame(runAnalysis);
+async function run() {
+  if (!video.paused || video.readyState > 2) await pose.send({image: video});
+  requestAnimationFrame(run);
 }
-
-runAnalysis();
+run();
 </script>
 </body>
-</html>
+</html> 
