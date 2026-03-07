@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fribatunneli AI - Virheen tunnistus</title>
+  <title>Fribatunneli AI - Rysty Analysaattori</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
 
@@ -30,7 +30,7 @@
 <body>
 
 <div class="container">
-  <h2>Fribatunneli AI - Tekniikkakorjaus</h2>
+  <h2>Fribatunneli AI - Rysty Analyysi</h2>
   <input type="file" id="upload" accept="video/*">
 
   <div id="canvas-container">
@@ -45,7 +45,6 @@
       <button id="btn-stop">RESET</button>
       <select id="speed-select">
         <option value="0.2">0.2x (Suositus)</option>
-        <option value="0.05">0.05x (Frame kerrallaan)</option>
         <option value="1">1x</option>
       </select>
     </div>
@@ -53,15 +52,15 @@
   </div>
 
   <div class="ui-panel">
-    <div id="nose-up-box" class="stat-box">
-      <span class="label">Kiekon asento (Takareuna)</span>
-      <span id="nose-status" class="stat-value">Etsitään heittoa...</span>
-      <div id="nose-instruction" class="instruction"></div>
+    <div id="pocket-box" class="stat-box">
+      <span class="label">Veto-linja (Pocket)</span>
+      <span id="pocket-status" class="stat-value">Etsitään heittoa...</span>
+      <div id="pocket-instruction" class="instruction"></div>
     </div>
 
     <div class="stat-box">
-      <span class="label">Ranteen ja kyynärpään suhde</span>
-      <span id="wrist-angle-status" class="stat-value">OK</span>
+      <span class="label">Painonsiirto (Takajalka -> Etujalka)</span>
+      <span id="weight-status" class="stat-value">OK</span>
     </div>
   </div>
 </div>
@@ -73,10 +72,10 @@ const upload = document.getElementById('upload');
 const speedSelect = document.getElementById('speed-select');
 const seekBar = document.getElementById('seek-bar');
 
-const noseStatus = document.getElementById('nose-status');
-const noseInstruction = document.getElementById('nose-instruction');
-const noseBox = document.getElementById('nose-up-box');
-const wristStatus = document.getElementById('wrist-angle-status');
+const pocketStatus = document.getElementById('pocket-status');
+const pocketInstruction = document.getElementById('pocket-instruction');
+const pocketBox = document.getElementById('pocket-box');
+const weightStatus = document.getElementById('weight-status');
 
 const btnPlay = document.getElementById('btn-play');
 const btnPause = document.getElementById('btn-pause');
@@ -87,6 +86,8 @@ const pose = new Pose({
 });
 
 pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+let isBackhand = true; // Asetetaan rystyheitto oletukseksi
 
 pose.onResults((results) => {
   const canvasCtx = canvas.getContext('2d');
@@ -99,26 +100,43 @@ pose.onResults((results) => {
   if (results.poseLandmarks) {
     drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
     
+    // Nivelet oikealle puolelle (oikeakätinen heittäjä)
     const s = results.poseLandmarks[12]; // Olkapää
     const e = results.poseLandmarks[14]; // Kyynärpää
     const w = results.poseLandmarks[16]; // Ranne
+    const hipR = results.poseLandmarks[24]; // Oikea lantio
+    const hipL = results.poseLandmarks[23]; // Vasen lantio
 
-    if (s && e && w) {
-      // VIRHEEN TUNNISTUS: Takareunan putoaminen (Nose Up)
-      // Kun ranne (w) on ylempänä kuin kyynärpää (e) vedon aikana,
-      // takareuna putoaa ja kiekko nousee pystyyn.
-      const wristElbowDiff = e.y - w.y;
+    if (s && e && w && hipR && hipL) {
+      if (isBackhand) {
+        // RYSTYHEITON ANALYYSI
 
-      if (wristElbowDiff > 0.05) {
-        noseStatus.innerText = "VIRHE: TAKAREUNA ALHAALLA";
-        noseBox.classList.add('warning');
-        noseInstruction.innerText = "KORJAUS: Pidä ranne kyynärpään alapuolella tai samalla tasolla koko vedon ajan. Paina peukalolla kiekon etureunaa alas.";
-        wristStatus.innerText = "RANNE LIIAN KORKEALLA";
-      } else {
-        noseStatus.innerText = "KIEKON ASENTO OK";
-        noseBox.classList.remove('warning');
-        noseInstruction.innerText = "";
-        wristStatus.innerText = "OK";
+        // 1. Rounding vs. Pocket (Veto-linja)
+        // Kun ranne (w) on kauempana vartalosta kuin kyynärpää (e) vedon alussa, se on rounding.
+        const roundingDiff = w.x - e.x;
+        
+        if (roundingDiff < -0.05) { // Oikeakätinen: ranne x-akselilla reilusti vasemmalle kyynärpäästä
+          pocketStatus.innerText = "VIRHE: ROUNDING";
+          pocketBox.classList.add('warning');
+          pocketInstruction.innerText = "KORJAUS: Tuo kiekko suorassa linjassa rinnan edestä ('the pocket'). Pidä ranne suorana.";
+        } else {
+          pocketStatus.innerText = "VEDO-LINJA OK";
+          pocketBox.classList.remove('warning');
+          pocketInstruction.innerText = "";
+        }
+
+        // 2. Painonsiirto (Lantion asento suhteessa etujalkaan)
+        // Kun lantion painopiste (keskikohta hipR ja hipL välillä) siirtyy etujalan puolelle, paino on siirtynyt.
+        const hipCenterY = (hipR.y + hipL.y) / 2;
+        const braceFootY = hipR.y; // Yksinkertaistus: brace foot on heittäjän oikea jalka
+
+        if (hipCenterY < braceFootY - 0.05) { 
+          weightStatus.innerText = "PAINO TAKANA";
+          weightStatus.className = "";
+        } else {
+          weightStatus.innerText = "PAINO ETUJALALLA (OK)";
+          weightStatus.className = "stat-value OK";
+        }
       }
     }
   }
@@ -148,5 +166,4 @@ async function run() {
 run();
 </script>
 </body>
-</html>
- 
+</html> 
