@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fribatunneli AI - Rysty Analysaattori</title>
+  <title>Fribatunneli AI - Pro Coach</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
 
@@ -14,23 +14,24 @@
     canvas { width: 100%; display: block; }
     video { display: none; } 
     
-    .ui-panel { background: #172235; padding: 15px; border-radius: 15px; margin-top: 15px; display: grid; grid-template-columns: 1fr; gap: 10px; }
-    .stat-box { background: #0f1722; padding: 15px; border-radius: 10px; border: 1px solid #2a3a55; text-align: left; }
-    .stat-value { font-size: 18px; font-weight: bold; color: #00aaff; display: block; margin-top: 5px; }
+    .ui-panel { background: #172235; padding: 15px; border-radius: 15px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-box { background: #0f1722; padding: 10px; border-radius: 10px; border: 1px solid #2a3a55; text-align: left; }
+    .stat-value { font-size: 16px; font-weight: bold; color: #00aaff; display: block; margin-top: 5px; }
     .warning { color: #ff4444 !important; border-color: #ff4444 !important; }
-    .instruction { font-size: 14px; color: #ffcc00; margin-top: 5px; font-style: italic; }
+    .instruction { font-size: 12px; color: #ffcc00; margin-top: 5px; font-style: italic; }
 
     .controls { background: #172235; padding: 15px; border-radius: 15px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
     .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; }
+    button, input[type="file"], select { background: #2a3a55; color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; }
+    button.active { background: #00aaff; }
     input[type="range"] { width: 100%; margin-top: 10px; }
-    .label { font-size: 11px; opacity: 0.7; text-transform: uppercase; }
+    .label { font-size: 10px; opacity: 0.7; text-transform: uppercase; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h2>Fribatunneli AI - Rysty Analyysi</h2>
+  <h3>Fribatunneli AI</h3>
   <input type="file" id="upload" accept="video/*">
 
   <div id="canvas-container">
@@ -40,11 +41,15 @@
 
   <div class="controls">
     <div class="btn-row">
+      <button id="mode-bh" class="active">RYSTY (BH)</button>
+      <button id="mode-fh">KÄMMEN (FH)</button>
+    </div>
+    <div class="btn-row">
       <button id="btn-play">PLAY</button>
       <button id="btn-pause">PAUSE</button>
-      <button id="btn-stop">RESET</button>
       <select id="speed-select">
-        <option value="0.2">0.2x (Suositus)</option>
+        <option value="0.2">0.2x</option>
+        <option value="0.05">0.05x (Super)</option>
         <option value="1">1x</option>
       </select>
     </div>
@@ -52,15 +57,23 @@
   </div>
 
   <div class="ui-panel">
-    <div id="pocket-box" class="stat-box">
-      <span class="label">Veto-linja (Pocket)</span>
-      <span id="pocket-status" class="stat-value">Etsitään heittoa...</span>
-      <div id="pocket-instruction" class="instruction"></div>
+    <div class="stat-box" id="box-line">
+      <span class="label">Veto-linja (Dippi)</span>
+      <span id="line-status" class="stat-value">OK</span>
+      <div id="line-instr" class="instruction"></div>
     </div>
-
+    <div class="stat-box" id="box-angle">
+      <span class="label">Kiekon kulma (Hyzer)</span>
+      <span id="angle-status" class="stat-value">OK</span>
+      <div id="angle-instr" class="instruction"></div>
+    </div>
+    <div class="stat-box" id="box-nose">
+      <span class="label">Nose Up / Down</span>
+      <span id="nose-status" class="stat-value">OK</span>
+    </div>
     <div class="stat-box">
-      <span class="label">Painonsiirto (Takajalka -> Etujalka)</span>
-      <span id="weight-status" class="stat-value">OK</span>
+      <span class="label">Heittotila</span>
+      <span id="mode-status" class="stat-value">RYSTY</span>
     </div>
   </div>
 </div>
@@ -72,97 +85,88 @@ const upload = document.getElementById('upload');
 const speedSelect = document.getElementById('speed-select');
 const seekBar = document.getElementById('seek-bar');
 
-const pocketStatus = document.getElementById('pocket-status');
-const pocketInstruction = document.getElementById('pocket-instruction');
-const pocketBox = document.getElementById('pocket-box');
-const weightStatus = document.getElementById('weight-status');
+let currentMode = 'BH'; // BH tai FH
+const modeStatus = document.getElementById('mode-status');
 
-const btnPlay = document.getElementById('btn-play');
-const btnPause = document.getElementById('btn-pause');
-const btnStop = document.getElementById('btn-stop');
+const lineStatus = document.getElementById('line-status');
+const lineInstr = document.getElementById('line-instr');
+const angleStatus = document.getElementById('angle-status');
+const angleInstr = document.getElementById('angle-instr');
+const noseStatus = document.getElementById('nose-status');
 
-const pose = new Pose({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-});
+const btnBH = document.getElementById('mode-bh');
+const btnFH = document.getElementById('mode-fh');
 
+btnBH.onclick = () => { currentMode = 'BH'; modeStatus.innerText = 'RYSTY'; btnBH.classList.add('active'); btnFH.classList.remove('active'); };
+btnFH.onclick = () => { currentMode = 'FH'; modeStatus.innerText = 'KÄMMEN'; btnFH.classList.add('active'); btnBH.classList.remove('active'); };
+
+const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
 pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
-let isBackhand = true; // Asetetaan rystyheitto oletukseksi
-
 pose.onResults((results) => {
-  const canvasCtx = canvas.getContext('2d');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvasCtx.save();
-  canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-  canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
   if (results.poseLandmarks) {
-    drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00aaff', lineWidth: 4});
     
-    // Nivelet oikealle puolelle (oikeakätinen heittäjä)
-    const s = results.poseLandmarks[12]; // Olkapää
+    const s = results.poseLandmarks[12]; // Oikea olka
     const e = results.poseLandmarks[14]; // Kyynärpää
     const w = results.poseLandmarks[16]; // Ranne
-    const hipR = results.poseLandmarks[24]; // Oikea lantio
-    const hipL = results.poseLandmarks[23]; // Vasen lantio
 
-    if (s && e && w && hipR && hipL) {
-      if (isBackhand) {
-        // RYSTYHEITON ANALYYSI
+    if (s && e && w) {
+      // 1. DIP ANALYYSI (Veto-linja)
+      // Jos ranne laskee vedon puolivälissä merkittävästi olkapäätä alemmas
+      if (w.y > s.y + 0.25) {
+        lineStatus.innerText = "VIRHE: VETO DIPPAA";
+        lineInstr.innerText = "KORJAUS: Älä pudota kiekkoa mahan kohdalla. Pidä veto samalla korkeudella koko matkan.";
+      } else {
+        lineStatus.innerText = "SUORA VETO"; lineInstr.innerText = "";
+      }
 
-        // 1. Rounding vs. Pocket (Veto-linja)
-        // Kun ranne (w) on kauempana vartalosta kuin kyynärpää (e) vedon alussa, se on rounding.
-        const roundingDiff = w.x - e.x;
-        
-        if (roundingDiff < -0.05) { // Oikeakätinen: ranne x-akselilla reilusti vasemmalle kyynärpäästä
-          pocketStatus.innerText = "VIRHE: ROUNDING";
-          pocketBox.classList.add('warning');
-          pocketInstruction.innerText = "KORJAUS: Tuo kiekko suorassa linjassa rinnan edestä ('the pocket'). Pidä ranne suorana.";
+      // 2. HYZER ANALYYSI
+      // Rystyheitossa jos ranne on selvästi kyynärpään alapuolella = Hyzer
+      if (currentMode === 'BH') {
+        if (w.y > e.y + 0.08) {
+          angleStatus.innerText = "LIIAN HYZER";
+          angleInstr.innerText = "KORJAUS: Nosta rannetta tai suorista selkää. Pyri flättiin lähtöön.";
         } else {
-          pocketStatus.innerText = "VEDO-LINJA OK";
-          pocketBox.classList.remove('warning');
-          pocketInstruction.innerText = "";
+          angleStatus.innerText = "FLÄTTI / OK"; angleInstr.innerText = "";
         }
-
-        // 2. Painonsiirto (Lantion asento suhteessa etujalkaan)
-        // Kun lantion painopiste (keskikohta hipR ja hipL välillä) siirtyy etujalan puolelle, paino on siirtynyt.
-        const hipCenterY = (hipR.y + hipL.y) / 2;
-        const braceFootY = hipR.y; // Yksinkertaistus: brace foot on heittäjän oikea jalka
-
-        if (hipCenterY < braceFootY - 0.05) { 
-          weightStatus.innerText = "PAINO TAKANA";
-          weightStatus.className = "";
+      } else {
+        // Kämmenheitossa Palm Roll analyysi
+        if (w.y < e.y - 0.04) {
+          angleStatus.innerText = "PALM ROLL!";
+          angleInstr.innerText = "KORJAUS: Pidä kämmen kohti taivasta irrotuksessa.";
         } else {
-          weightStatus.innerText = "PAINO ETUJALALLA (OK)";
-          weightStatus.className = "stat-value OK";
+          angleStatus.innerText = "FH OK"; angleInstr.innerText = "";
         }
+      }
+
+      // 3. NOSE UP (Verrataan ranteen ja kyynärpään linjaa irrotuksessa)
+      if (w.y < e.y - 0.02) {
+        noseStatus.innerText = "NOSE UP";
+        noseStatus.classList.add('warning');
+      } else {
+        noseStatus.innerText = "NOSE OK";
+        noseStatus.classList.remove('warning');
       }
     }
   }
-  canvasCtx.restore();
+  ctx.restore();
 });
 
-upload.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    video.src = URL.createObjectURL(file);
-    video.onloadedmetadata = () => { seekBar.max = video.duration; };
-    video.playbackRate = parseFloat(speedSelect.value);
-  }
-});
+upload.onchange = (e) => { video.src = URL.createObjectURL(e.target.files[0]); video.onloadedmetadata = () => { seekBar.max = video.duration; }; };
+document.getElementById('btn-play').onclick = () => video.play();
+document.getElementById('btn-pause').onclick = () => video.pause();
+speedSelect.onchange = (e) => { video.playbackRate = parseFloat(e.target.value); };
+video.ontimeupdate = () => { seekBar.value = video.currentTime; };
+seekBar.oninput = () => { video.currentTime = seekBar.value; };
 
-btnPlay.addEventListener('click', () => video.play());
-btnPause.addEventListener('click', () => video.pause());
-btnStop.addEventListener('click', () => { video.pause(); video.currentTime = 0; });
-speedSelect.addEventListener('change', (e) => { video.playbackRate = parseFloat(e.target.value); });
-video.addEventListener('timeupdate', () => { seekBar.value = video.currentTime; });
-seekBar.addEventListener('input', () => { video.currentTime = seekBar.value; });
-
-async function run() {
-  if (!video.paused || video.readyState > 2) await pose.send({image: video});
-  requestAnimationFrame(run);
-}
+async function run() { if (!video.paused || video.readyState > 2) await pose.send({image: video}); requestAnimationFrame(run); }
 run();
 </script>
 </body>
